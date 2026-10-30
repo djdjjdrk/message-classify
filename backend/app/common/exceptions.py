@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from backend.common.response import Response
+from backend.app.common.response import Response
 
 logger = logging.getLogger(__name__)
 

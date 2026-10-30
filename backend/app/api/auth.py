@@ -5,15 +5,15 @@ from backend.app.dependencies import CurrentUser, DbSession
 from backend.app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, UserResponse
 from backend.app.service.auth import authenticate_user, register_user
 from backend.app.utils.jwt import create_access_token
-from backend.common.exceptions import AuthenticationError
-from backend.common.response import Response
+from backend.app.common.exceptions import AuthenticationError
+from backend.app.common.response import Response
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
 
 @router.post("/register", response_model=Response)
 def register(data: RegisterRequest, db: DbSession) -> Response:
-    user = register_user(db, data.username, data.password)
+    user = register_user(db, data.username, data.password, data.nickname)
     return Response.success(message="注册成功，请登录", data=UserResponse.model_validate(user))
 
 

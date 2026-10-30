@@ -3,14 +3,14 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 
 from backend.app.api.auth import router as auth_router
-from backend.common.exceptions import (
+from backend.app.common.exceptions import (
     BusinessException,
     business_exception_handler,
     global_exception_handler,
     http_exception_handler,
     validation_exception_handler,
 )
-from backend.common.response import Response
+from backend.app.common.response import Response
 
 app = FastAPI(
     title="校园留言分类与垃圾信息识别系统",

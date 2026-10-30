@@ -26,7 +26,11 @@ def test_login_and_me(client):
     data = body["data"]
     assert data["expires_in"] == 7200
     assert data["token_type"] == "bearer"
-    assert data["user"] == {"id": 1, "username": "student", "role": "student"}
+    assert {k: data["user"][k] for k in ("id", "username", "nickname", "role")} == {
+        "id": 1, "username": "student", "nickname": "学生", "role": "student",
+    }
+    assert data["user"]["created_at"]
+    assert data["user"]["updated_at"]
     claims = jwt.decode(data["access_token"], settings.JWT_SECRET_KEY, algorithms=["HS256"])
     assert claims["sub"] == "1"
     assert claims["exp"] - claims["iat"] == 7200
@@ -35,7 +39,7 @@ def test_login_and_me(client):
     assert "password_hash" not in str(data)
 
 
-@pytest.mark.parametrize("username,password", [("student", "wrong"), ("unknown", "test-password-123")])
+@pytest.mark.parametrize("username,password", [("student", "wrong-password"), ("unknown", "test-password-123")])
 def test_bad_credentials_share_error(client, username, password):
     response = client.post("/api/v1/auth/login", json={"username": username, "password": password})
     assert response.status_code == 401
@@ -44,8 +48,9 @@ def test_bad_credentials_share_error(client, username, password):
 
 
 @pytest.mark.parametrize("data", [
-    {}, {"username": " ", "password": "p"}, {"username": "a", "password": ""},
-    {"username": "a" * 65, "password": "p"}, {"username": "a", "password": "p" * 1025},
+    {}, {"username": " ", "password": "password123"}, {"username": "ab", "password": "password123"},
+    {"username": "a" * 21, "password": "password123"},
+    {"username": "student", "password": "p" * 7}, {"username": "student", "password": "p" * 33},
 ])
 def test_login_validation(client, data):
     assert client.post("/api/v1/auth/login", json=data).status_code == 422

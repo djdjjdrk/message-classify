@@ -7,7 +7,7 @@ from jwt.exceptions import InvalidTokenError
 from backend.app.dependencies.database import DbSession
 from backend.app.models import User
 from backend.app.utils.jwt import decode_access_token
-from backend.common.exceptions import AuthenticationError
+from backend.app.common.exceptions import AuthenticationError
 
 bearer = HTTPBearer(auto_error=False)
 

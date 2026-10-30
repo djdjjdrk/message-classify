@@ -49,7 +49,8 @@ if not st.session_state.get("access_token"):
 
 user = st.session_state.user
 with st.sidebar:
-    st.text(user["username"])
+    st.text(user["nickname"])
+    st.caption(f"账号：{user['username']}")
     st.caption("管理员" if user["role"] == "admin" else "普通用户")
     if st.button("退出登录", icon=":material/logout:"):
         clear_session()

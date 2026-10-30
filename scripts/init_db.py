@@ -17,15 +17,15 @@ def seed_users() -> None:
                 print(f"Skipped existing user: {username} (password and role unchanged)")
                 continue
             while True:
-                password = getpass(f"Set password for {username} (8-128 characters): ")
-                if not 8 <= len(password) <= 128 or not password.strip():
-                    print("Password must contain 8-128 characters and cannot be whitespace only.")
+                password = getpass(f"Set password for {username} (8-32 characters): ")
+                if not 8 <= len(password) <= 32 or not password.strip():
+                    print("Password must contain 8-32 characters and cannot be whitespace only.")
                     continue
                 if password != getpass("Confirm password: "):
                     print("Passwords do not match. Try again.")
                     continue
                 break
-            session.add(models.User(username=username, password_hash=hash_password(password), role=role))
+            session.add(models.User(username=username, nickname=username, password_hash=hash_password(password), role=role))
             session.flush()
             print(f"Prepared user: {username} ({role})")
     print("Account initialization committed.")

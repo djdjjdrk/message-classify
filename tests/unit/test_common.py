@@ -4,8 +4,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
-from backend.common.exceptions import BusinessException
-from backend.common.response import Response
+from backend.app.common.exceptions import BusinessException
+from backend.app.common.response import Response
 from frontend import api_client
 
 

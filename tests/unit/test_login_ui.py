@@ -43,7 +43,7 @@ def test_login_navigation_and_logout(app, username):
 
 def test_bad_password_and_expiry(app):
     app.text_input[0].set_value("student")
-    app.text_input[1].set_value("wrong")
+    app.text_input[1].set_value("wrong-password")
     app.form_submit_button[0].click().run()
     assert not app.exception
     assert app.error[0].value == "用户名或密码错误"
@@ -70,9 +70,10 @@ def test_registration_returns_to_login_and_new_account_can_sign_in(app):
     app.switch_page("app_pages/register.py").run()
     assert not app.exception
     assert app.title[0].value == "注册"
-    app.text_input[0].set_value("campus-user")
-    app.text_input[1].set_value("my-password-123")
-    app.text_input[2].set_value("my-password-123")
+    app.text_input(key="register_username").set_value("campus-user")
+    app.text_input(key="register_nickname").set_value("校园小王")
+    app.text_input(key="register_password").set_value("my-password-123")
+    app.text_input(key="register_confirm_password").set_value("my-password-123")
     app.form_submit_button[0].click().run()
     assert not app.exception
     assert app.title[0].value == "登录"
@@ -86,19 +87,21 @@ def test_registration_returns_to_login_and_new_account_can_sign_in(app):
     assert not app.exception
     assert app.title[0].value == "留言管理"
     assert app.session_state["user"]["role"] == "student"
+    assert app.session_state["user"]["nickname"] == "校园小王"
+    assert app.sidebar.text[0].value == "校园小王"
 
 
 def test_registration_password_confirmation_and_duplicate_error(app):
     app.switch_page("app_pages/register.py").run()
-    app.text_input[0].set_value("student")
-    app.text_input[1].set_value("my-password-123")
-    app.text_input[2].set_value("different-password")
+    app.text_input(key="register_username").set_value("student")
+    app.text_input(key="register_password").set_value("my-password-123")
+    app.text_input(key="register_confirm_password").set_value("different-password")
     app.form_submit_button[0].click().run()
     assert not app.exception
     assert app.error[0].value == "两次输入的密码不一致"
-    app.text_input[0].set_value("student")
-    app.text_input[1].set_value("my-password-123")
-    app.text_input[2].set_value("my-password-123")
+    app.text_input(key="register_username").set_value("student")
+    app.text_input(key="register_password").set_value("my-password-123")
+    app.text_input(key="register_confirm_password").set_value("my-password-123")
     app.form_submit_button[0].click().run()
     assert not app.exception
     assert app.error[0].value == "用户名已存在，请使用其他用户名"

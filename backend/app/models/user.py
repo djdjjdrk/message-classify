@@ -11,7 +11,8 @@ class User(Base):
     __table_args__ = {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"}
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    username: Mapped[str] = mapped_column(String(64), unique=True)
+    username: Mapped[str] = mapped_column(String(20), unique=True)
+    nickname: Mapped[str] = mapped_column(String(20))
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(
         Enum("student", "admin", validate_strings=True),
@@ -19,3 +20,4 @@ class User(Base):
         server_default="student",
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)

@@ -74,8 +74,8 @@ def login(username: str, password: str) -> dict[str, Any]:
     return request("POST", "/auth/login", json={"username": username, "password": password})
 
 
-def register(username: str, password: str) -> dict[str, Any]:
-    return request("POST", "/auth/register", json={"username": username, "password": password})
+def register(username: str, password: str, nickname: str | None = None) -> dict[str, Any]:
+    return request("POST", "/auth/register", json={"username": username, "password": password, "nickname": nickname})
 
 
 def get_current_user(token: str) -> dict[str, Any]:

@@ -1,13 +1,14 @@
 """注册、登录请求和认证响应。"""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
-    password: str = Field(min_length=1, max_length=1024)
+    username: str = Field(min_length=3, max_length=20)
+    password: str = Field(min_length=8, max_length=32)
 
     @field_validator("username", mode="before")
     @classmethod
@@ -19,8 +20,15 @@ class RegisterRequest(LoginRequest):
     # 注册请求不接收 role，防止通过额外字段创建管理员。
     model_config = ConfigDict(extra="forbid")
 
-    username: str = Field(min_length=3, max_length=64, pattern=r"^[\w-]+$")
-    password: str = Field(min_length=8, max_length=128)
+    username: str = Field(min_length=3, max_length=20, pattern=r"^[\w-]+$")
+    nickname: str | None = Field(default=None, min_length=1, max_length=20)
+
+    @field_validator("nickname", mode="before")
+    @classmethod
+    def normalize_nickname(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
 
     @field_validator("username")
     @classmethod
@@ -42,7 +50,10 @@ class UserResponse(BaseModel):
 
     id: int
     username: str
+    nickname: str
     role: Literal["student", "admin"]
+    created_at: datetime
+    updated_at: datetime
 
 
 class LoginResponse(BaseModel):

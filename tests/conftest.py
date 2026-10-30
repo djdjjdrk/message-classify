@@ -17,7 +17,7 @@ from backend.app.utils.password import hash_password
 from backend.app.database import get_db
 from backend.app.models import User
 from backend.app.main import app
-from backend.common.response import Response
+from backend.app.common.response import Response
 
 
 @pytest.fixture(scope="session")
@@ -34,8 +34,8 @@ def db(password_hash):
     table.create(engine)
     with Session(engine) as session:
         session.add_all([
-            User(id=1, username="student", password_hash=password_hash, role="student"),
-            User(id=2, username="admin", password_hash=password_hash, role="admin"),
+            User(id=1, username="student", nickname="学生", password_hash=password_hash, role="student"),
+            User(id=2, username="admin", nickname="管理员", password_hash=password_hash, role="admin"),
         ])
         session.commit()
         yield session

@@ -18,12 +18,14 @@ def test_seed_keeps_existing_passwords_and_roles(db, monkeypatch):
 def test_seed_creates_missing_users_with_hashed_passwords(db, monkeypatch):
     db.query(User).delete()
     db.commit()
-    answers = iter(["short", "new-password-123", "mismatch", "new-password-123", "new-password-123", "admin-password-123", "admin-password-123"])
+    answers = iter(["short", "p" * 33, "new-password-123", "mismatch", "new-password-123", "new-password-123", "admin-password-123", "admin-password-123"])
     monkeypatch.setattr(init_db, "SessionLocal", sessionmaker(bind=db.get_bind()))
     monkeypatch.setattr(init_db, "getpass", lambda _: next(answers))
     init_db.seed_users()
     users = {u.username: u for u in db.scalars(select(User))}
     assert users["student"].role == "student"
     assert users["admin"].role == "admin"
+    assert users["student"].nickname == "student"
+    assert users["admin"].nickname == "admin"
     assert verify_password("new-password-123", users["student"].password_hash)
     assert verify_password("admin-password-123", users["admin"].password_hash)
