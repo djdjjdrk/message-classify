@@ -1,0 +1,109 @@
+import httpx
+import pytest
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
+
+from backend.app.main import app
+from backend.common.exceptions import BusinessException
+from backend.common.response import Response
+from frontend import api_client
+
+
+@pytest.fixture
+def error_client():
+    test_app = FastAPI(exception_handlers=app.exception_handlers)
+
+    @test_app.get("/business-error")
+    def business_error():
+        raise BusinessException("留言已被删除", code=400)
+
+    @test_app.get("/http-error")
+    def http_error():
+        raise HTTPException(status_code=429, detail="请求过于频繁", headers={"Retry-After": "30"})
+
+    @test_app.get("/unexpected-error")
+    def unexpected_error():
+        raise RuntimeError("internal-database-password-must-not-leak")
+
+    @test_app.get("/bad-response", response_model=Response)
+    def bad_response():
+        return {"unexpected": "internal-data"}
+
+    with TestClient(test_app, raise_server_exceptions=False) as client:
+        yield client
+
+
+def test_business_failure_keeps_http_200(error_client):
+    response = error_client.get("/business-error")
+    assert response.status_code == 200
+    assert response.json() == {"code": 400, "message": "留言已被删除", "data": None}
+
+
+def test_http_failure_preserves_status_and_headers(error_client):
+    response = error_client.get("/http-error")
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "30"
+    assert response.json() == {"code": 429, "message": "请求过于频繁", "data": None}
+
+
+@pytest.mark.parametrize("path", ["/unexpected-error", "/bad-response"])
+def test_internal_errors_are_hidden(error_client, path):
+    response = error_client.get(path)
+    assert response.status_code == 500
+    assert response.json() == {"code": 500, "message": "服务器内部错误", "data": None}
+
+
+def test_validation_does_not_echo_password(client):
+    password = "secret-password-" * 100
+    response = client.post("/api/v1/auth/login", json={"username": "student", "password": password})
+    assert response.status_code == 422
+    assert response.json() == {"code": 422, "message": "请求参数校验错误", "data": None}
+    assert password not in response.text
+
+
+def test_invalid_json_uses_unified_error(client):
+    response = client.post("/api/v1/auth/login", content="{broken", headers={"Content-Type": "application/json"})
+    assert response.status_code == 422
+    assert response.json() == {"code": 422, "message": "请求参数校验错误", "data": None}
+
+
+def test_framework_errors_and_openapi():
+    with TestClient(app) as client:
+        missing = client.get("/not-found")
+        assert missing.status_code == 404
+        assert missing.json() == {"code": 404, "message": "Not Found", "data": None}
+        method = client.get("/api/v1/auth/login")
+        assert method.status_code == 405
+        assert "POST" in method.headers["Allow"]
+        assert method.json()["code"] == 405
+        schema = client.get("/openapi.json").json()
+        responses = schema["paths"]["/api/v1/auth/login"]["post"]["responses"]
+        for status in ("200", "401", "422", "500"):
+            assert responses[status]["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/Response"
+
+
+def test_frontend_unwraps_data(monkeypatch):
+    monkeypatch.setattr(api_client.httpx, "request", lambda *a, **kw: httpx.Response(
+        200, json={"code": 200, "message": "请求成功", "data": {"list": [], "total": 0}},
+    ))
+    assert api_client.request("GET", "/messages") == {"list": [], "total": 0}
+
+
+@pytest.mark.parametrize("status,code", [(200, 400), (401, 401), (403, 403), (500, 500)])
+def test_frontend_checks_http_and_business_codes(monkeypatch, status, code):
+    monkeypatch.setattr(api_client.httpx, "request", lambda *a, **kw: httpx.Response(
+        status, json={"code": code, "message": "服务返回的提示", "data": None},
+    ))
+    with pytest.raises(api_client.ApiError) as exc:
+        api_client.request("GET", "/example")
+    assert str(exc.value) == "服务返回的提示"
+    assert exc.value.status_code == status
+    assert exc.value.code == code
+
+
+def test_frontend_handles_non_json_http_errors(monkeypatch):
+    monkeypatch.setattr(api_client.httpx, "request", lambda *a, **kw: httpx.Response(502, text="<html>gateway error</html>"))
+    with pytest.raises(api_client.ApiError) as exc:
+        api_client.request("GET", "/example")
+    assert exc.value.status_code == 502
+    assert "gateway error" not in str(exc.value)

@@ -1,0 +1,30 @@
+# Python and uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Test output and editor state
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+
+# Local datasets, generated models, and logs
+data/raw/*
+data/processed/*
+artifacts/models/*
+*.log
+
+# Local documentation
+docs/
