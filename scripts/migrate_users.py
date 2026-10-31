@@ -10,7 +10,11 @@ def main() -> None:
         raise RuntimeError("This migration requires MySQL.")
 
     with engine.begin() as connection:
-        columns = {column["name"]: column for column in inspect(connection).get_columns("users")}
+        columns = {}
+        database_columns = inspect(connection).get_columns("users")
+        for column in database_columns:
+            column_name = column["name"]
+            columns[column_name] = column
         # 缩短字段前检查数据，防止 MySQL 隐式截断已有用户名。
         invalid = connection.execute(text(
             "SELECT COUNT(*) FROM users WHERE CHAR_LENGTH(username) NOT BETWEEN 3 AND 20"

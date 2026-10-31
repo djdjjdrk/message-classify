@@ -1,15 +1,14 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 
 from backend.app.dependencies.auth import CurrentUser
 from backend.app.models import User
-from backend.app.common.exceptions import PermissionDeniedError
 
 
 def require_admin(user: CurrentUser) -> User:
     if user.role != "admin":
-        raise PermissionDeniedError()
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     return user
 
 

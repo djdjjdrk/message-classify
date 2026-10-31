@@ -13,7 +13,10 @@ def seed_users() -> None:
 
     with SessionLocal.begin() as session:
         for username, role in (("student", "student"), ("admin", "admin")):
-            if session.scalar(select(models.User).where(models.User.username == username)):
+            query = select(models.User)
+            query = query.where(models.User.username == username)
+            existing_user = session.scalar(query)
+            if existing_user is not None:
                 print(f"Skipped existing user: {username} (password and role unchanged)")
                 continue
             while True:

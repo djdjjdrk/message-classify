@@ -27,6 +27,7 @@ class AnnotationRecord(Base):
     )
     reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     message: Mapped[Message] = relationship()
     annotator: Mapped[User] = relationship()

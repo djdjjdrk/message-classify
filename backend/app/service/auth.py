@@ -1,5 +1,4 @@
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.app.models import User
@@ -11,30 +10,35 @@ _dummy_hash = hash_password("dummy-password-for-timing-only")
 
 
 def authenticate_user(db: Session, username: str, password: str) -> User | None:
-    user = db.scalar(select(User).where(User.username == username))
-    valid = verify_password(password, user.password_hash if user else _dummy_hash)
-    return user if user is not None and valid else None
+    query = select(User)
+    query = query.where(User.username == username)
+    user = db.scalar(query)
+
+    if user is None:
+        verify_password(password, _dummy_hash)
+        return None
+
+    if not verify_password(password, user.password_hash):
+        return None
+
+    return user
 
 
 def register_user(db: Session, username: str, password: str, nickname: str | None = None) -> User:
-    if db.scalar(select(User.id).where(User.username == username)) is not None:
+    query = select(User.id)
+    query = query.where(User.username == username)
+    existing_user_id = db.scalar(query)
+    if existing_user_id is not None:
         raise BusinessException("用户名已存在，请使用其他用户名", code=409)
 
+    if not nickname:
+        nickname = username
+    password_hash = hash_password(password)
     user = User(
-        username=username, nickname=nickname or username,
-        password_hash=hash_password(password), role="student",
+        username=username, nickname=nickname,
+        password_hash=password_hash, role="student",
     )
-    try:
-        db.add(user)
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        # 唯一约束兜住并发注册；其他完整性错误仍交给全局异常处理器。
-        if db.scalar(select(User.id).where(User.username == username)) is not None:
-            raise BusinessException("用户名已存在，请使用其他用户名", code=409) from None
-        raise
-    except SQLAlchemyError:
-        db.rollback()
-        raise
+    db.add(user)
+    db.commit()
     db.refresh(user)
     return user

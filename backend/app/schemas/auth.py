@@ -13,7 +13,9 @@ class LoginRequest(BaseModel):
     @field_validator("username", mode="before")
     @classmethod
     def normalize_username(cls, value: object) -> object:
-        return value.strip() if isinstance(value, str) else value
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
 
 class RegisterRequest(LoginRequest):
@@ -27,7 +29,9 @@ class RegisterRequest(LoginRequest):
     @classmethod
     def normalize_nickname(cls, value: object) -> object:
         if isinstance(value, str):
-            return value.strip() or None
+            value = value.strip()
+            if value == "":
+                return None
         return value
 
     @field_validator("username")
