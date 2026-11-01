@@ -1,6 +1,6 @@
 # ML 使用说明
 
-按照“读取数据 → 清洗检查 → 划分数据 → 训练集提取特征 → 测试集转换 → 训练模型 → 预测评估”的顺序，实现多项式朴素贝叶斯。当前离线代码、模型保存、加载评估、原文预测、发布接入及贡献词解释已实现；人工纠正后重训仍待完成。
+按照“读取数据 → 清洗检查 → 划分数据 → 训练集提取特征 → 测试集转换 → 训练模型 → 预测评估”的顺序，实现多项式朴素贝叶斯。当前离线代码、模型保存、加载评估、原文预测、发布接入、贡献词解释及人工纠正后重训对比均已实现。
 
 ## 当前产物（2026-11-01）
 
@@ -95,7 +95,12 @@
 8. **模型保存与加载（已实现）**：`train.py` 保存分类器、向量器、类别映射、阈值、训练时间和模型名等元数据，`evaluate.py` 加载模型评估；分词及预处理仍依赖项目代码，当前没有单独的预处理配置快照。
 9. **单条文本预测入口（已实现）**：`predict.py` 的 `predict_text(content, model_path)` 加载现有向量器与 `MultinomialNaiveBayes`，只调用 `transform`，返回 `PredictionResult`；字段为 `status/label/spam_probability/explanation/model_name`，ML 标签为整数 `0/1`。空原文或全空白抛出 `ValueError`，部分未知词忽略未知部分，全未知词或纯标点等无特征输入返回 `no_features`，标签和概率为空、解释为 `[]`。
 10. **接入后端（已实现）**：发布业务层将 `0/1` 转成数据库的 `normal/spam`，保存状态、类别、垃圾概率、模型名及解释。模型缺失记为 `no_model`，损坏或计算异常记为 `error`；均保存待审核留言。人工标签优先，原始预测保留。成功预测为正常且垃圾概率不超过 `0.25` 时自动通过，其余仍由人工审核；自动通过阈值由后端 `AUTO_APPROVE_SPAM_THRESHOLD` 配置，不改变模型分类阈值。
-11. **人工标注后的重训**：使用确认过的标签补充训练集，冻结的测试集保持隔离，在同一测试集上比较版本；不将模型预测直接作为真实标签。
+11. **人工标注后的重训（已实现）**：`scripts/retrain_from_annotations.py` 读取数据库中有人工标签的留言，按规范化正文去重、排除与固定测试集重合的正文，更新或补充训练集，保存 `data/processed/split/train_corrected.csv`；用纠正后的训练集重新拟合词表并训练同款手写算法，输出 `artifacts/models/retrained/pipeline.joblib`；两个模型各自用自己的词表转换同一份测试集，输出 `comparison.json` / `comparison.md` 对照表。冻结的测试集保持隔离，模型预测不作为真实标签。
+
+```powershell
+uv run python -m scripts.retrain_from_annotations
+uv run python -m scripts.retrain_from_annotations --overwrite   # 补充标注后重跑
+```
 
 上述离线模块已实现，可依次运行 `python -m backend.app.ml.dataset`、`python -m backend.app.ml.features`、`python -m backend.app.ml.train` 和 `python -m backend.app.ml.evaluate`。运行训练前请确认标签已审核；评估阶段只加载已有模型，不重新训练。
 

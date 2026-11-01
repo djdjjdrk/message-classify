@@ -30,3 +30,4 @@ artifacts/models/*
 # Local documentation
 docs/
 /DEVELOPMENT.md
+artifacts/*.csv

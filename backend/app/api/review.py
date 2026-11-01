@@ -7,9 +7,7 @@ from backend.app.dependencies import AdminUser, DbSession
 from backend.app.schemas.review import (
     PendingMessageResponse, ReviewRecordResponse, ReviewRequest, ReviewResponse,
 )
-from backend.app.service.review import (
-    list_pending_reviews, list_review_records, review_message as save_review,
-)
+from backend.app.service.review import ReviewService
 
 router = APIRouter(prefix="/reviews", tags=["留言审核"])
 
@@ -21,7 +19,7 @@ def get_pending_messages(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 10,
 ) -> Response:
-    messages, total = list_pending_reviews(db, page=page, page_size=page_size)
+    messages, total = ReviewService(db).list_pending(page=page, page_size=page_size)
     message_list = []
     for message in messages:
         effective_label = None
@@ -57,7 +55,7 @@ def get_review_history(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 10,
 ) -> Response:
-    records, total = list_review_records(db, page=page, page_size=page_size)
+    records, total = ReviewService(db).list_history(page=page, page_size=page_size)
     history = []
     for record in records:
         nickname = None
@@ -91,8 +89,8 @@ def review_message(
     user: AdminUser,
     db: DbSession,
 ) -> Response:
-    save_review(
-        db, message_id=message_id, reviewer_id=user.id,
+    ReviewService(db).review(
+        message_id=message_id, reviewer_id=user.id,
         decision=payload.decision, comment=payload.comment,
     )
     data = ReviewResponse(message_id=message_id, review_status=payload.decision)
