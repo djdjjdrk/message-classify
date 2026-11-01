@@ -1,16 +1,45 @@
+import logging
+from pathlib import Path
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
 from backend.app.common.exceptions import BusinessException
+from backend.app.config import BASE_DIR, settings
 from backend.app.database import utc_now
+from backend.app.ml.predict import predict_text
 from backend.app.models import Message, User
+from backend.app.service.review import auto_approve_message
+
+logger = logging.getLogger(__name__)
 
 
 def create_message(db: Session, *, author_id: int, content: str) -> Message:
-    message = Message(author_id=author_id, content=content)
+    if not isinstance(content, str) or not content.strip():
+        raise BusinessException("留言内容不能为空", code=422)
+    message = Message(author_id=author_id, content=content, review_status="pending")
+    model_path = Path(settings.MODEL_PATH)
+    if not model_path.is_absolute():
+        model_path = BASE_DIR / model_path
+    try:
+        prediction = predict_text(content, model_path=model_path)
+        message.prediction_status = prediction.status
+        message.predicted_label = {0: "normal", 1: "spam"}.get(prediction.label)
+        message.predicted_probability = prediction.spam_probability
+        message.model_name = prediction.model_name
+        message.prediction_explanation = prediction.explanation
+    except FileNotFoundError:
+        message.prediction_status = "no_model"
+        logger.warning("预测模型不存在：%s", model_path)
+    except Exception:
+        # 模型加载、转换或计算失败都不阻止发布；仍交给人工审核。
+        message.prediction_status = "error"
+        logger.exception("留言预测失败")
     db.add(message)
     try:
+        auto_approve_message(db, message=message, spam_threshold=settings.AUTO_APPROVE_SPAM_THRESHOLD)
+        # 留言、自动审核状态与审核历史一起提交，失败时一起回滚。
         db.commit()
     except SQLAlchemyError:
         db.rollback()

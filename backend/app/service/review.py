@@ -6,6 +6,32 @@ from backend.app.common.exceptions import BusinessException
 from backend.app.models import Message, ReviewRecord
 
 
+def auto_approve_message(db: Session, *, message: Message, spam_threshold: float) -> None:
+    """发布时自动通过高置信度正常留言，随留言一起提交审核记录。"""
+    if (
+        message.review_status != "pending"
+        or message.prediction_status != "success"
+        or message.predicted_label != "normal"
+        or message.predicted_probability is None
+        or message.predicted_probability > spam_threshold
+    ):
+        return
+
+    record = ReviewRecord(
+        message=message,
+        reviewer_id=None,
+        review_source="automatic",
+        previous_status="pending",
+        decision="approved",
+        label_snapshot=message.predicted_label,
+        model_name_snapshot=message.model_name,
+        spam_probability_snapshot=message.predicted_probability,
+        normal_threshold_snapshot=spam_threshold,
+    )
+    message.review_status = "approved"
+    db.add(record)
+
+
 def list_pending_reviews(db: Session, *, page: int, page_size: int) -> tuple[list[Message], int]:
     count_query = select(func.count()).select_from(Message)
     count_query = count_query.where(Message.deleted_at.is_(None))

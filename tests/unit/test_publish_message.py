@@ -10,7 +10,8 @@ def auth_headers(user_id=1):
 
 
 @pytest.mark.parametrize("user_id", [1, 2])
-def test_publish_saves_author_content_and_pending_states(client, db, user_id):
+def test_publish_saves_author_content_and_pending_review_without_model(client, db, user_id, tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.app.service.message.settings.MODEL_PATH", str(tmp_path / "missing.joblib"))
     response = client.post(
         "/api/v1/messages", headers=auth_headers(user_id),
         json={"content": "  今晚图书馆有人一起自习吗？\n欢迎一起交流。  "},
@@ -24,7 +25,7 @@ def test_publish_saves_author_content_and_pending_states(client, db, user_id):
     assert saved.author_id == data["author_id"] == user_id
     assert saved.content == data["content"] == "今晚图书馆有人一起自习吗？\n欢迎一起交流。"
     assert saved.review_status == data["review_status"] == "pending"
-    assert saved.prediction_status == data["prediction_status"] == "pending"
+    assert saved.prediction_status == data["prediction_status"] == "no_model"
     assert saved.predicted_label is None
     assert saved.manual_label is None
     assert saved.deleted_at is None

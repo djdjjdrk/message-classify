@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     JWT_EXPIRE_HOURS: int = Field(default=2, ge=1, le=24)
 
     MODEL_PATH: str = "artifacts/models/baseline/pipeline.joblib"
+    AUTO_APPROVE_SPAM_THRESHOLD: float = Field(default=0.25, ge=0, le=0.5)
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env", env_file_encoding="utf-8", extra="ignore"

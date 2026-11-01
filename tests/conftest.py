@@ -16,12 +16,20 @@ from backend.app.api.auth import router
 from backend.app.api.classification import router as classification_router
 from backend.app.api.messages import router as messages_router
 from backend.app.api.review import router as review_router
+from backend.app.api.statistics import router as statistics_router
 from backend.app.dependencies import AdminUser
 from backend.app.utils.password import hash_password
 from backend.app.database import get_db
 from backend.app.models import AnnotationRecord, Message, ReviewRecord, User
 from backend.app.main import app
 from backend.app.common.response import Response
+
+
+@pytest.fixture(autouse=True)
+def isolated_model_path(tmp_path, monkeypatch):
+    # 默认不依赖本地模型是否存在；预测用例自行指定临时模型。
+    monkeypatch.setattr("backend.app.service.message.settings.MODEL_PATH", str(tmp_path / "missing.joblib"))
+    monkeypatch.setattr("backend.app.service.message.settings.AUTO_APPROVE_SPAM_THRESHOLD", 0.01)
 
 
 @pytest.fixture(scope="session")
@@ -62,6 +70,7 @@ def client(db):
     test_app.include_router(classification_router, prefix="/api/v1")
     test_app.include_router(annotation_router, prefix="/api/v1")
     test_app.include_router(review_router, prefix="/api/v1")
+    test_app.include_router(statistics_router, prefix="/api/v1")
 
     @test_app.get("/admin-only")
     def admin_only(user: AdminUser):
@@ -70,3 +79,31 @@ def client(db):
     test_app.dependency_overrides[get_db] = lambda: db
     with TestClient(test_app) as client:
         yield client
+
+
+@pytest.fixture
+def prediction_artifact(tmp_path):
+    """手工指定可核算的概率，仅写临时测试模型，不训练或修改基线。"""
+    import joblib
+    import numpy as np
+    from sklearn.feature_extraction.text import CountVectorizer
+    from backend.app.ml.features import tokenize
+    from backend.app.ml.naive_bayes import MultinomialNaiveBayes
+
+    words = ["学习", "免费", "领取", "共同", "中奖", "兼职", "刷单", "返利"]
+    vectorizer = CountVectorizer(
+        tokenizer=tokenize, token_pattern=None, lowercase=False,
+        vocabulary={word: index for index, word in enumerate(words)},
+    )
+    model = MultinomialNaiveBayes()
+    model.classes_ = np.array([0, 1])
+    model.n_features_in_ = len(words)
+    model.class_log_prior_ = np.log([0.5, 0.5])
+    model.feature_log_prob_ = np.log([
+        [0.5, 0.02, 0.03, 0.25, 0.05, 0.05, 0.05, 0.05],
+        [0.02, 0.25, 0.2, 0.25, 0.07, 0.07, 0.07, 0.07],
+    ])
+    artifact = {"vectorizer": vectorizer, "model": model, "model_name": "test_v1", "threshold": 0.5}
+    path = tmp_path / "pipeline.joblib"
+    joblib.dump(artifact, path)
+    return path, artifact

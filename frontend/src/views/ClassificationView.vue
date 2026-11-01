@@ -20,11 +20,11 @@ function saved(message) {
 </script>
 
 <template>
-  <div class="page-heading"><div><p class="eyebrow">CLASSIFICATION</p><h1>分类标注</h1><p class="muted">查看分类结果，确认或修正正常、垃圾标签。人工标签优先于模型预测。</p></div></div>
+  <div class="page-heading"><div><p class="eyebrow">CLASSIFICATION</p><h1>分类标注</h1><p class="muted">查看分类结果并进行人工标注。</p></div></div>
   <p v-if="notice" class="notice success" role="status">{{ notice }}</p>
   <section class="list-section" :aria-busy="loading">
     <div class="list-toolbar">
-      <label class="filter-label">分类<select v-model="category" @change="notice = ''"><option value="all">全部</option><option value="unclassified">未分类</option><option value="normal">正常留言</option><option value="spam">垃圾信息</option></select></label>
+      <label class="filter-label">分类<select v-model="category" @change="notice = ''"><option value="all">全部</option><option value="unclassified">未分类</option><option value="normal">普通</option><option value="spam">垃圾</option></select></label>
       <button :disabled="loading" @click="reload">刷新列表</button>
     </div>
     <ListStatus :loading="loading" :error="error" :empty="!items.length" @retry="reload" />

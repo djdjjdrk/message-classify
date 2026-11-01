@@ -40,6 +40,10 @@ def get_classification_messages(
             created_at=message.created_at,
             predicted_label=message.predicted_label,#type: ignore
             prediction_status=message.prediction_status,#type: ignore
+            review_status=message.review_status,#type: ignore
+            predicted_probability=message.predicted_probability,
+            model_name=message.model_name,
+            prediction_explanation=message.prediction_explanation,
             manual_label=message.manual_label,#type: ignore
             effective_label=effective_label,#type: ignore
             label_source=label_source,

@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class Response(BaseModel):
-    """统一封装的返回格式，与 Timetable-Agent 的调用方式保持一致。"""
+    """统一封装的返回格式"""
 
     code: int
     message: str

@@ -6,6 +6,7 @@ import RegisterView from '../views/RegisterView.vue'
 import MessagesView from '../views/MessagesView.vue'
 import ClassificationView from '../views/ClassificationView.vue'
 import ReviewView from '../views/ReviewView.vue'
+import StatisticsView from '../views/StatisticsView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -17,6 +18,7 @@ const router = createRouter({
         { path: 'messages', component: MessagesView, meta: { title: '留言管理' } },
         { path: 'classification', component: ClassificationView, meta: { title: '分类标注', admin: true } },
         { path: 'review', component: ReviewView, meta: { title: '留言审核', admin: true } },
+        { path: 'statistics', component: StatisticsView, meta: { title: '留言统计', admin: true } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/messages' },

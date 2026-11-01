@@ -69,3 +69,29 @@ test('failed loads can be retried without changing the current page', async () =
   assert.equal(list.page.value, 1)
   scope.stop()
 })
+
+test('message search carries keywords through pages and scopes and clears to page one', async () => {
+  const scope = effectScope()
+  const keyword = ref('图书馆')
+  const board = ref('mine')
+  const calls = []
+  const endpoints = Object.fromEntries(['mine', 'public'].map((name) => [name, async (params) => {
+    calls.push({ scope: name, ...params })
+    return { total: 21, list: [] }
+  }]))
+  const endpoint = computed(() => endpoints[board.value])
+  const list = scope.run(() => usePagedList(endpoint, computed(() => ({ keyword: keyword.value }))))
+  await flush()
+  list.page.value = 2
+  await flush()
+  assert.deepEqual(calls.at(-1), { scope: 'mine', page: 2, page_size: 10, keyword: '图书馆' })
+  board.value = 'public'
+  await flush()
+  assert.deepEqual(calls.at(-1), { scope: 'public', page: 1, page_size: 10, keyword: '图书馆' })
+  list.page.value = 2
+  await flush()
+  keyword.value = ''
+  await flush()
+  assert.deepEqual(calls.at(-1), { scope: 'public', page: 1, page_size: 10, keyword: '' })
+  scope.stop()
+})

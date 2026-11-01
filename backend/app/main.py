@@ -7,6 +7,7 @@ from backend.app.api.auth import router as auth_router
 from backend.app.api.classification import router as classification_router
 from backend.app.api.messages import router as messages_router
 from backend.app.api.review import router as review_router
+from backend.app.api.statistics import router as statistics_router
 from backend.app.common.exceptions import (
     BusinessException,
     business_exception_handler,
@@ -40,3 +41,4 @@ app.include_router(messages_router, prefix="/api/v1")
 app.include_router(classification_router, prefix="/api/v1")
 app.include_router(annotation_router, prefix="/api/v1")
 app.include_router(review_router, prefix="/api/v1")
+app.include_router(statistics_router, prefix="/api/v1")

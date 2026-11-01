@@ -17,6 +17,7 @@ function logout() {
       <template v-if="auth.user?.role === 'admin'">
         <RouterLink to="/classification">分类标注</RouterLink>
         <RouterLink to="/review">留言审核</RouterLink>
+        <RouterLink to="/statistics">留言统计</RouterLink>
       </template>
     </nav>
     <div class="account">

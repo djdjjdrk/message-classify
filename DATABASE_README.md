@@ -30,7 +30,7 @@ DATABASE_URL=mysql+pymysql://campus_app:your_password@127.0.0.1:3306/campus_mess
 | `users` | `User` | 用户账号、昵称、密码哈希和角色 |
 | `messages` | `Message` | 留言正文、作者、模型预测、人工标签、审核状态和软删除时间 |
 | `annotation_records` | `AnnotationRecord` | 每次人工标签变化的历史 |
-| `review_records` | `ReviewRecord` | 人工审核历史及审核依据；自动审核相关字段已预留 |
+| `review_records` | `ReviewRecord` | 人工及自动审核历史，自动通过时保存模型依据快照 |
 
 ```mermaid
 erDiagram
@@ -77,7 +77,7 @@ ORM 中的 `message.author`、`record.annotator`、`record.reviewer` 等是关�
 | `predicted_label` | ENUM('normal', 'spam') | 是 | 模型预测标签；初始为 NULL |
 | `prediction_status` | ENUM('pending', 'success', 'no_features', 'no_model', 'error') | 否 | 预测状态；ORM 和数据库默认均为 `pending` |
 | `predicted_probability` | FLOAT | 是 | **垃圾信息 spam 的概率**，不是预测标签的置信度；CHECK 限制在 0～1 |
-| `prediction_explanation` | JSON | 是 | 特征及贡献列表，例如 `[{"feature":"刷单","weight":1.28}]`；Python `None` 保存为 SQL NULL |
+| `prediction_explanation` | JSON | 是 | 词贡献列表，例如 `[{"word":"刷单","count":1,"contribution":1.28,"direction":"spam"}]`；Python `None` 保存为 SQL NULL |
 | `model_name` | VARCHAR(128) | 是 | 实际预测使用的模型版本 |
 | `manual_label` | ENUM('normal', 'spam') | 是 | 人工标签；初始为 NULL |
 | `review_status` | ENUM('pending', 'approved', 'rejected') | 否 | 待审核、通过、驳回；ORM 和数据库默认均为 `pending`，有索引 |
@@ -87,7 +87,7 @@ ORM 中的 `message.author`、`record.annotator`、`record.reviewer` 等是关�
 
 发布接口先去除正文首尾空白，再拒绝空白正文。数据库的正文长度 CHECK 不负责判断内容是否全为空白。
 
-`prediction_status` 的含义为：`pending` 尚未预测，`success` 成功，`no_features` 无有效特征，`no_model` 缺少模型，`error` 预测失败。当前发布方法仅保存 `pending` 状态，尚未调用模型预测。
+`prediction_status` 的含义为：`pending` 尚未预测，`success` 成功，`no_features` 无已知特征，`no_model` 缺少模型，`error` 预测失败。发布业务层现已调用模型，保存真实状态。在线无特征不写成功类别及概率，显示“无已知特征，请人工标注”；这与离线评估按先验预测全零样本的策略分别处理。
 
 ### 3.3 `annotation_records`：人工标注历史表
 
@@ -108,7 +108,7 @@ ORM 中的 `message.author`、`record.annotator`、`record.reviewer` 等是关�
 
 ### 3.4 `review_records`：审核历史表
 
-模型文件：[review_record.py](backend/app/models/review_record.py)。人工审核及历史查询由 [审核业务函数](backend/app/service/review.py) 实现，自动审核相关快照字段已预留。
+模型文件：[review_record.py](backend/app/models/review_record.py)。人工审核、发布时自动通过及历史查询由 [审核业务函数](backend/app/service/review.py) 实现。
 
 | 字段 | 类型 | 可空 | 含义、默认值与约束 |
 | --- | --- | --- | --- |
@@ -121,12 +121,12 @@ ORM 中的 `message.author`、`record.annotator`、`record.reviewer` 等是关�
 | `label_snapshot` | ENUM('normal', 'spam') | 是 | 审核时的分类快照 |
 | `model_name_snapshot` | VARCHAR(128) | 是 | 审核时使用的模型版本快照 |
 | `spam_probability_snapshot` | FLOAT | 是 | 审核时的垃圾信息概率快照 |
-| `normal_threshold_snapshot` | FLOAT | 是 | 审核时采用的正常留言判定阈值快照 |
+| `normal_threshold_snapshot` | FLOAT | 是 | 自动通过正常留言时采用的垃圾概率上限，默认 `0.25` |
 | `comment` | TEXT | 是 | 审核说明 |
 | `created_at` | DATETIME | 否 | 创建时间；ORM 默认 UTC 当前时间 |
 | `updated_at` | DATETIME | 否 | 更新时间；ORM 默认 UTC 当前时间，更新时自动刷新 |
 
-当前模型没有对审核来源与审核人组合、驳回原因必填、快照概率范围等设置 CHECK。人工审核服务会校验驳回原因及说明长度；自动审核和模型快照写入尚未实现，不能将字段用途理解为数据库已经强制执行的约束。
+当前模型没有对审核来源与审核人组合、驳回原因必填、快照概率范围等设置 CHECK。人工审核服务会校验驳回原因及说明长度；自动通过服务保存来源及模型快照，不能将业务规则理解为数据库已经强制执行的约束。
 
 ## 4. 写入方法：具体修改哪个表、哪些字段
 
@@ -135,7 +135,7 @@ ORM 中的 `message.author`、`record.annotator`、`record.reviewer` 等是关�
 | 方法与源码 | HTTP 入口 | 表及操作 | 显式写入字段 | 自动生成或更新字段 |
 | --- | --- | --- | --- | --- |
 | [`register_user()`](backend/app/service/auth.py) | `POST /api/v1/auth/register` → `register()` | `users`：INSERT | `username`、`nickname`、`password_hash`、`role='student'` | `id`、`created_at`、`updated_at` |
-| [`create_message()`](backend/app/service/message.py) | `POST /api/v1/messages` → `publish_message()` | `messages`：INSERT | `author_id`、`content` | `id`、`created_at`、`updated_at`；状态默认见下文 |
+| [`create_message()`](backend/app/service/message.py) | `POST /api/v1/messages` → `publish_message()` | `messages`：INSERT | `author_id`、`content`、`prediction_status`；成功或无特征时还保存预测字段，见下文 | `id`、`created_at`、`updated_at`；`review_status='pending'` |
 | [`delete_message()`](backend/app/service/message.py) | `DELETE /api/v1/messages/{message_id}` → `remove_message()` | `messages`：UPDATE，按 `id` 定位 | `deleted_at=utc_now()` | `updated_at` |
 | [`annotate_message()`](backend/app/service/annotation.py) | `POST /api/v1/classification/messages/{message_id}/annotations` → `create_annotation()` | `messages`：UPDATE，按 `id` 定位 | `manual_label=label` | `updated_at` |
 | 同一次 `annotate_message()` 调用 | 同上 | `annotation_records`：INSERT | `message_id`、`annotator_id`、`previous_label`、`new_label`、`reason` | `id`、`created_at`、`updated_at` |
@@ -150,20 +150,24 @@ ORM 中的 `message.author`、`record.annotator`、`record.reviewer` 等是关�
 
 ### 4.2 发布 `create_message()`
 
-`author_id` 来自后端验证后的登录用户，正文来自请求校验结果。新增后的状态为：
+`author_id` 来自后端验证后的登录用户，正文来自请求校验结果。业务层使用 `MODEL_PATH` 指定的现有向量器和分类器预测，仅转换训练词表，不训练。新增后的状态为：
 
 ```text
-prediction_status = 'pending'
+prediction_status = 'success' / 'no_features' / 'no_model' / 'error'
 review_status = 'pending'
-predicted_label = NULL
-predicted_probability = NULL
-prediction_explanation = NULL
-model_name = NULL
+predicted_label = 成功时为 'normal' / 'spam'，其他为 NULL
+predicted_probability = 成功时为垃圾概率，其他为 NULL
+prediction_explanation = 成功时为最多 5 个贡献词，无特征为 []，失败为 NULL
+model_name = 成功或无特征时为实际加载的模型名，失败为 NULL
 manual_label = NULL
 deleted_at = NULL
 ```
 
-该方法提交失败时执行 `rollback()`；成功后 `refresh()` 获取生成字段。当前发布流程只新增留言，不新增标注记录或审核记录。
+每个新贡献词保存 `word/count/contribution/direction`，贡献为词频乘垃圾与正常条件概率的对数差；方向为 `spam` 或 `normal`。历史 JSON 原样保留，前端不将旧的 `weight` 当成新词贡献。
+
+预测成功且类别为 `normal`、垃圾概率不超过 `AUTO_APPROVE_SPAM_THRESHOLD`（默认 `0.25`）时，发布流程将 `review_status` 改为 `approved`，同时新增自动审核记录；其余保持 `pending`。预测异常仍保存待审核留言。数据库提交失败时执行 `rollback()`；成功后 `refresh()` 获取生成字段。
+
+自动审核记录的 `review_source='automatic'`、`reviewer_id=NULL`、`previous_status='pending'`、`decision='approved'`、`label_snapshot='normal'`；同时保存 `model_name_snapshot`、`spam_probability_snapshot` 和 `normal_threshold_snapshot`，最后一项是垃圾概率上限。留言与自动审核历史在一次事务中提交，不新增人工标注记录。该逻辑仅用于新发布留言，不批量处理旧的待审核留言。
 
 ### 4.3 删除 `delete_message()`
 
@@ -264,5 +268,5 @@ ck_review_records_automatic_details
 - 时间使用 SQLAlchemy 的 `default=utc_now` 和 `onupdate=utc_now`，数据库没有对应的时间默认值或自动更新时间触发器。通过原生 SQL 写入时，需要自行提供和维护时间字段；无实际更新的只读查询不会刷新 `updated_at`。
 - 业务方法负责提交事务，HTTP 路由主要负责参数校验、鉴权和响应组装。管理员限制由接口依赖执行；直接在其他 Python 代码中调用标注等服务方法时，需要调用方保证身份权限。
 - 当前业务没有物理删除、修改留言正文、修改昵称或密码、修改角色、编辑标注历史的方法。模型允许的字段更新能力不代表已经提供对应接口。
-- 当前人工审核及审核历史查询已有业务实现，预测结果落库和自动审核尚未实现。`MLBackend.predict()`、`train()`、`evaluate()` 目前只是协议签名，按约定不直接访问数据库，详见 [ML 对接文档](backend/app/ml/README.md)。
-- 后续接入预测时，业务层需要保存 `messages.prediction_status/predicted_label/predicted_probability/prediction_explanation/model_name`；接入自动审核时，需要同步维护 `messages.review_status` 和新增 `review_records`，记录来源及模型依据快照。这是后续开发涉及的写入。
+- 发布业务层已保存 `messages.prediction_status/predicted_label/predicted_probability/prediction_explanation/model_name`，ML 模块只计算，不访问数据库。本次复用已有列，无新增表或迁移，详见 [ML 使用说明](backend/app/ml/README.md)。
+- 人工审核、发布时正常留言自动通过及审核历史查询已有实现。自动通过复用现有字段，无新增表或列；旧库需按已有迁移说明确认 `reviewer_id` 可空、审核来源及快照列已存在。

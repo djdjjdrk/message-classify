@@ -6,6 +6,7 @@ import { login, register } from '../src/api/auth.js'
 import { publishMessage, deleteMessage, getMyMessages, getPublicMessages } from '../src/api/messages.js'
 import { annotateMessage, getClassificationMessages } from '../src/api/classification.js'
 import { reviewMessage, getPendingReviews } from '../src/api/review.js'
+import { getStatistics } from '../src/api/statistics.js'
 
 const originalFetch = globalThis.fetch
 let expired
@@ -32,6 +33,18 @@ test('unwraps the API envelope and sends the token and query parameters', async 
   assert.deepEqual(await getMyMessages({ page: 2, page_size: 10 }), { id: 1 })
   assert.equal(calls[0].url, '/api/v1/messages/mine?page=2&page_size=10')
   assert.equal(calls[0].headers.Authorization, 'Bearer test-token')
+})
+
+test('message search encodes literal keywords and statistics uses the admin endpoint', async () => {
+  const keyword = '图书馆 & %_ /'
+  await getMyMessages({ page: 2, keyword })
+  await getPublicMessages({ page: 1, keyword })
+  for (const call of calls) {
+    assert.equal(new URL(call.url, 'http://localhost').searchParams.get('keyword'), keyword)
+  }
+  await getStatistics()
+  assert.equal(calls.at(-1).url, '/api/v1/statistics')
+  assert.equal(calls.at(-1).method, 'GET')
 })
 
 test('all page actions use the existing backend routes and bodies', async () => {

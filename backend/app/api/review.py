@@ -39,6 +39,9 @@ def get_pending_messages(
             created_at=message.created_at,
             predicted_label=message.predicted_label,#type: ignore
             prediction_status=message.prediction_status,#type: ignore
+            predicted_probability=message.predicted_probability,
+            model_name=message.model_name,
+            prediction_explanation=message.prediction_explanation,
             manual_label=message.manual_label,#type: ignore
             effective_label=effective_label,#type: ignore
             label_source=label_source,
@@ -72,6 +75,9 @@ def get_review_history(
             previous_status=record.previous_status,#type: ignore
             decision=record.decision,#type: ignore
             label_snapshot=record.label_snapshot,#type: ignore
+            model_name_snapshot=record.model_name_snapshot,
+            spam_probability_snapshot=record.spam_probability_snapshot,
+            normal_threshold_snapshot=record.normal_threshold_snapshot,
             comment=record.comment,
             created_at=record.created_at,
         ))

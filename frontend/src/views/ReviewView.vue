@@ -18,7 +18,7 @@ function saved(message) {
 </script>
 
 <template>
-  <div class="page-heading"><div><p class="eyebrow">MODERATION</p><h1>留言审核</h1><p class="muted">决定待审核留言是否公开。通过后公开，驳回时需要填写原因。</p></div><button :disabled="loading" @click="reload">刷新列表</button></div>
+  <div class="page-heading"><div><p class="eyebrow">MODERATION</p><h1>留言审核</h1><p class="muted">高置信度正常留言发布时自动通过，其余留言在此人工审核。通过后公开，驳回时需要填写原因。</p></div><button :disabled="loading" @click="reload">刷新列表</button></div>
   <p v-if="notice" class="notice success" role="status">{{ notice }}</p>
   <section class="list-section" :aria-busy="loading">
     <ListStatus :loading="loading" :error="error" :empty="!items.length" @retry="reload" />

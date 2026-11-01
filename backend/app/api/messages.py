@@ -14,7 +14,7 @@ router = APIRouter(prefix="/messages", tags=["留言"])
 def publish_message(data: MessageCreate, user: CurrentUser, db: DbSession) -> Response:
     message = create_message(db, author_id=user.id, content=data.content)
     return Response.success(
-        message="留言发布成功，等待审核",
+        message="留言发布成功，已自动通过审核" if message.review_status == "approved" else "留言发布成功，等待审核",
         data=MessageResponse.model_validate(message),
     )
 

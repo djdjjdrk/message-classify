@@ -1,7 +1,7 @@
 """待审核留言和人工审核请求。"""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -36,6 +36,9 @@ class PendingMessageResponse(BaseModel):
     created_at: datetime
     predicted_label: Literal["normal", "spam"] | None
     prediction_status: Literal["pending", "success", "no_features", "no_model", "error"]
+    predicted_probability: float | None
+    model_name: str | None
+    prediction_explanation: list[dict[str, Any]] | None
     manual_label: Literal["normal", "spam"] | None
     effective_label: Literal["normal", "spam"] | None
     label_source: Literal["manual", "model", "unclassified"]
@@ -56,5 +59,8 @@ class ReviewRecordResponse(BaseModel):
     previous_status: Literal["pending", "approved", "rejected"]
     decision: Literal["approved", "rejected"]
     label_snapshot: Literal["normal", "spam"] | None
+    model_name_snapshot: str | None
+    spam_probability_snapshot: float | None
+    normal_threshold_snapshot: float | None
     comment: str | None
     created_at: datetime
