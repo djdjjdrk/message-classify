@@ -10,6 +10,7 @@ from collections import Counter
 from contextlib import closing
 from pathlib import Path
 
+import pandas as pd
 from openpyxl import load_workbook
 
 
@@ -66,24 +67,21 @@ def read_campus(path: Path) -> list[dict]:
     seen = set()
     with path.open(encoding="utf-8-sig", newline="") as source:
         reader = csv.DictReader(source)
-        if reader.fieldnames != ["content", "label"]:
-            raise ValueError("校园标注表须且仅须含 content,label 两列")
+        if reader.fieldnames not in (["content", "label"], ["content", "label", "source"]):
+            raise ValueError("校园标注表须含 content,label 或 content,label,source 列")
         for row in reader:
             if None in row or not row["content"] or row["label"] not in {"0", "1"}:
                 raise ValueError("校园标注表含空正文、未确认标签或异常列")
             if row["content"] in seen:
                 raise ValueError("校园标注表存在重复正文")
             seen.add(row["content"])
-            result.append({**row, "source": "ruc_tree_hole"})
+            result.append({**row, "source": (row.get("source") or "").strip() or "ruc_tree_hole"})
     return result
 
 
 def write_csv(path: Path, fields: list[str], rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8-sig", newline="") as output:
-        writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    pd.DataFrame(rows, columns=fields, dtype=object).to_csv(path, index=False, encoding="utf-8-sig", mode="x")
 
 
 def prepare(input_path: Path, campus_path: Path, output_root: Path, limit: int = 1000, seed: int = 20261101) -> dict:
@@ -155,9 +153,9 @@ def prepare(input_path: Path, campus_path: Path, output_root: Path, limit: int =
     }
     assert sum(removal_counts.values()) + len(candidates) == len(raw_descriptions)
     assert len({row["content"] for row in merged}) == len(merged)
-    write_csv(targets["spam"], ["content", "label"], selected)
+    write_csv(targets["spam"], ["content", "label", "source"], selected)
     write_csv(targets["review"], ["raw_description", "content", "occurrences", "status", "reason"], review)
-    write_csv(targets["combined"], ["content", "label"], merged)
+    write_csv(targets["combined"], ["content", "label", "source"], merged)
     write_csv(targets["sources"], ["content", "label", "source"], merged)
     targets["report"].write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))

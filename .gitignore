@@ -22,12 +22,13 @@ htmlcov/
 .vscode/
 
 # Local datasets, generated models, and logs
-data/raw/*
-data/processed/*
-artifacts/models/*
+backend/data/raw/*
+backend/data/processed/*
+backend/data/split/*
+backend/artifacts/models/*
 *.log
 
 # Local documentation
 docs/
 /DEVELOPMENT.md
-artifacts/*.csv
+backend/artifacts/*.csv

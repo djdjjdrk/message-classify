@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent  # 项目根目录
+BASE_DIR = Path(__file__).resolve().parents[1]  # backend 目录
 
 
 class Settings(BaseSettings):
@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: Literal["HS256"] = "HS256"
     JWT_EXPIRE_HOURS: int = Field(default=2, ge=1, le=24)
 
-    MODEL_PATH: str = "artifacts/models/baseline/pipeline.joblib"
+    MODEL_PATH: str = "artifacts/models/final/pipeline.joblib"
     AUTO_APPROVE_SPAM_THRESHOLD: float = Field(default=0.25, ge=0, le=0.5)
 
     model_config = SettingsConfigDict(

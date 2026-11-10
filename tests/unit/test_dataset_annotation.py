@@ -5,7 +5,25 @@ import json
 
 import pytest
 
-from scripts.annotate_tree_hole import annotate, sample_id, suggest
+from backend.app.commands.annotate_tree_hole import annotate, sample_id, suggest
+from backend.app.commands.clean_tree_hole import clean
+
+
+@pytest.mark.parametrize("records,expected", [
+    ([], []),
+    ([{"detail": 123}, {"detail": None}, {}], []),
+    ([{"detail": " 0001 "}, {"detail": 123}, {"detail": "0001"},
+      {"detail": '带有逗号,换行\n和"引号"'}, {"detail": " NA "}],
+     ["0001", '带有逗号,换行\n和"引号"', "NA"]),
+])
+def test_pandas_cleaning_preserves_text_and_removes_invalid_or_duplicate_rows(tmp_path, records, expected):
+    source, output = tmp_path / "raw.jsonl", tmp_path / "content.csv"
+    source.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in records), encoding="utf-8-sig")
+    clean(source, output)
+    with output.open(encoding="utf-8-sig", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert [row["content"] for row in rows] == expected
+    assert all(row["source"] == "campus_posts" for row in rows)
 
 
 def write_content(path, texts):
@@ -35,7 +53,8 @@ def test_preserves_text_and_uses_content_ids_for_review_overrides(tmp_path):
     annotate(source, output, decisions, audit)
     with output.open(encoding="utf-8-sig", newline="") as result:
         rows = list(csv.DictReader(result))
-    assert list(rows[0]) == ["content", "label"]
+    assert list(rows[0]) == ["content", "label", "source"]
+    assert {row["source"] for row in rows} == {"campus_posts"}
     assert [row["content"] for row in rows] == list(reversed(texts))
     assert [row["label"] for row in rows] == ["-1", "1", "0"]
     with audit.open(encoding="utf-8-sig", newline="") as result:
@@ -75,6 +94,6 @@ def test_excludes_uncertain_rows_and_keeps_original_audit(tmp_path):
     write_content(source, texts)
     annotate(source, output, audit_path=audit, exclude_uncertain=True)
     with output.open(encoding="utf-8-sig", newline="") as result:
-        assert list(csv.DictReader(result)) == [{"content": texts[0], "label": "0"}]
+        assert list(csv.DictReader(result)) == [{"content": texts[0], "label": "0", "source": "campus_posts"}]
     with audit.open(encoding="utf-8-sig", newline="") as result:
         assert [row["label"] for row in csv.DictReader(result)] == ["0", "-1"]

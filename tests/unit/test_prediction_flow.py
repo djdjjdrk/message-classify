@@ -14,8 +14,8 @@ def headers(user=2):
 
 
 @pytest.fixture
-def online_model(prediction_artifact, monkeypatch):
-    path, _ = prediction_artifact
+def online_model(prediction_pipeline, monkeypatch):
+    path, _ = prediction_pipeline
     monkeypatch.setattr("backend.app.service.message.settings.MODEL_PATH", str(path))
     return path
 

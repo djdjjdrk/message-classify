@@ -5,7 +5,7 @@ import csv
 import pytest
 from openpyxl import Workbook
 
-from scripts.prepare_iad import prepare, read_descriptions
+from backend.app.commands.prepare_iad import prepare, read_descriptions
 
 
 def make_xlsx(path, descriptions, header="广告内容描述"):
@@ -49,9 +49,9 @@ def test_filters_notes_duplicates_and_cross_source_conflicts(tmp_path):
     assert result["selected_iad_records"] == 2
     assert result["combined_label_counts"] == {"0": 1, "1": 2}
     assert read_csv(tmp_path / "out/combined/labeled_posts.csv") == [
-        {"content": "食堂今天吃什么", "label": "0"},
-        {"content": "低门槛高收益", "label": "1"},
-        {"content": "投资高额回报", "label": "1"},
+        {"content": "食堂今天吃什么", "label": "0", "source": "ruc_tree_hole"},
+        {"content": "低门槛高收益", "label": "1", "source": "iad_part1"},
+        {"content": "投资高额回报", "label": "1", "source": "iad_part1"},
     ]
     sources = read_csv(tmp_path / "out/combined/labeled_posts_with_source.csv")
     assert [row["source"] for row in sources] == ["ruc_tree_hole", "iad_part1", "iad_part1"]

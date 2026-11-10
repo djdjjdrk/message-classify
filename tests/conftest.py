@@ -82,11 +82,12 @@ def client(db):
 
 
 @pytest.fixture
-def prediction_artifact(tmp_path):
+def prediction_pipeline(tmp_path):
     """手工指定可核算的概率，仅写临时测试模型，不训练或修改基线。"""
     import joblib
     import numpy as np
     from sklearn.feature_extraction.text import CountVectorizer
+    from sklearn.pipeline import make_pipeline
     from backend.app.ml.features import tokenize
     from backend.app.ml.naive_bayes import MultinomialNaiveBayes
 
@@ -103,7 +104,9 @@ def prediction_artifact(tmp_path):
         [0.5, 0.02, 0.03, 0.25, 0.05, 0.05, 0.05, 0.05],
         [0.02, 0.25, 0.2, 0.25, 0.07, 0.07, 0.07, 0.07],
     ])
-    artifact = {"vectorizer": vectorizer, "model": model, "model_name": "test_v1", "threshold": 0.5}
+    pipeline = make_pipeline(vectorizer, model)
+    pipeline.model_name_ = "test_v1"
+    pipeline.training_sample_count_ = 4
     path = tmp_path / "pipeline.joblib"
-    joblib.dump(artifact, path)
-    return path, artifact
+    joblib.dump(pipeline, path)
+    return path, pipeline

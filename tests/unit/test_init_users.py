@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.app.utils.password import verify_password
 from backend.app.models import User
-from scripts import init_db
+from backend.app.commands import init_db
 
 
 def test_seed_keeps_existing_passwords_and_roles(db, monkeypatch):

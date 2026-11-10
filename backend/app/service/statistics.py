@@ -21,7 +21,8 @@ def get_message_statistics(db: Session) -> StatisticsResponse:
         func.count(case((Message.review_status == "pending", 1))).label("pending"),
         func.count(case((Message.review_status == "approved", 1))).label("approved"),
         func.count(case((Message.review_status == "rejected", 1))).label("rejected"),
-    ).where(Message.deleted_at.is_(None))
+    )
+    query = query.where(Message.deleted_at.is_(None))
     counts = db.execute(query).one()
     return StatisticsResponse(
         total=counts.total,

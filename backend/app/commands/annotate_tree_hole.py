@@ -8,6 +8,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
+import pandas as pd
 
 RULE_VERSION = "campus-v1"
 
@@ -79,8 +80,8 @@ def annotate(
     seen = set()
     with input_path.open(encoding="utf-8-sig", newline="") as source:
         reader = csv.DictReader(source)
-        if reader.fieldnames != ["content"]:
-            raise ValueError("输入须为仅含 content 列的清洗 CSV")
+        if reader.fieldnames not in (["content"], ["content", "source"]):
+            raise ValueError("输入须为含 content 或 content,source 列的清洗 CSV")
         for number, row in enumerate(reader, 2):
             content = row["content"]
             if None in row or not content or content != content.strip():
@@ -98,6 +99,7 @@ def annotate(
             if type(label) is not int or label not in (-1, 0, 1) or not reason:
                 raise ValueError(f"第 {number} 行标注决定无效")
             output_rows.append({"sample_id": identifier, "content": content, "label": label,
+                                "source": (row.get("source") or "").strip() or "campus_posts",
                                 "reason": reason, "method": method})
     unknown = set(decisions) - seen
     if unknown:
@@ -110,19 +112,17 @@ def annotate(
         if path is not None and path.exists():
             raise FileExistsError(f"输出文件已存在：{path}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("x", encoding="utf-8-sig", newline="") as output:
-        writer = csv.DictWriter(output, fieldnames=["content", "label"])
-        writer.writeheader()
-        # 待确认的在最前面，其次为垃圾候选；同类内保留原始顺序。
-        priority = {-1: 0, 1: 1, 0: 2}
-        for row in sorted(included_rows, key=lambda row: priority[row["label"]]):
-            writer.writerow({"content": row["content"], "label": row["label"]})
+    # 待确认的在最前面，其次为垃圾候选；同类内保留原始顺序。
+    priority = {-1: 0, 1: 1, 0: 2}
+    ordered = sorted(included_rows, key=lambda row: priority[row["label"]])
+    pd.DataFrame(ordered, columns=["content", "label", "source"]).to_csv(
+        output_path, index=False, encoding="utf-8-sig", mode="x",
+    )
     if audit_path is not None:
         audit_path.parent.mkdir(parents=True, exist_ok=True)
-        with audit_path.open("x", encoding="utf-8-sig", newline="") as audit:
-            writer = csv.DictWriter(audit, fieldnames=["sample_id", "content", "label", "reason", "method"])
-            writer.writeheader()
-            writer.writerows(output_rows)
+        pd.DataFrame(output_rows, columns=["sample_id", "content", "label", "source", "reason", "method"]).to_csv(
+            audit_path, index=False, encoding="utf-8-sig", mode="x",
+        )
     print(json.dumps({"total": len(included_rows), "normal": counts[0], "spam": counts[1],
                       "pending": counts[-1], "excluded_uncertain": len(output_rows) - len(included_rows),
                       "reviewed_by_assistant": len(decisions)}, ensure_ascii=False))

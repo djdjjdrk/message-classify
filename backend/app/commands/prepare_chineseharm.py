@@ -1,7 +1,6 @@
 """筛选 ChineseHarm-Bench 广告类垃圾候选；不读取或覆盖正常留言数据。"""
 
 import argparse
-import csv
 import hashlib
 import json
 import random
@@ -11,8 +10,11 @@ from collections import Counter
 from difflib import SequenceMatcher
 from pathlib import Path
 
+import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
+
+from backend.app.ml.grouping import URL, template_key
 
 
 CATEGORIES = (
@@ -28,7 +30,6 @@ NEGATIVE = re.compile(
     r"|.{0,15}(?:骗人的|这骗子|那些骗子|这些骗子|收费的狗|收门槛的滚)"
 )
 CONTACT = re.compile(r"私[信聊我]|联系|加我|[+➕]|[微薇威][信星]|[vV][xX]|[qQ]{1,2}|企鹅|滴滴|斯我|丝我|来人|有意|报名")
-URL = re.compile(r"https?://[a-z0-9./?&=%#:@+~_-]+|(?:[a-z0-9-]+\.)+(?:com|cn|top|cc|net|xyz|vip|org)(?:/[a-z0-9./?&=%#:@+~_-]*)?", re.I)
 PRICE = re.compile(r"\d+(?:\.\d+)?\s*(?:元|米|块|刀|r\b|R\b)|[一二三四五六七八九十百千]+(?:元|米|块)|一[单天次].{0,5}\d+")
 BLACK_SERVICE = re.compile(
     r"代[发放]|代fa|[抄炒超吵钞]小说|补[单丹]|刷[单丹手子粉赞评量]|涨[粉赞]|买[赞粉]|"
@@ -85,31 +86,9 @@ def eligible(content: str, category: str) -> tuple[bool, str]:
     return (True, reason) if ok else (False, "未检出足够明确的广告、诈骗推广或商业引流组合")
 
 
-def template_key(content: str) -> str:
-    """只用于查重；输出正文不替换金额、网址或联系方式。"""
-    text = re.sub(r"\[em\].*?\[/em\]", "", content, flags=re.I)
-    text = re.sub(r"/(?:比心|玫瑰|爱心|汪汪|期待|色|沧桑|捂脸|笑哭)", "", text)
-    text = URL.sub("网址", text)
-    text = re.sub(r"(?:微信|微|薇信|vx|wx|qq|企鹅|扣扣)\s*[:：+➕= ]*\s*[a-z0-9_.-]{3,}", "联系账号", text, flags=re.I)
-    text = re.sub(r"\d{5,}", "号码", text)
-    text = re.sub(r"\d+(?:\.\d+)?\s*(?:元|米|块|刀|r\b)", "金额", text, flags=re.I)
-    text = re.sub(r"(?<![a-z])dy(?![a-z])|斗音|都音|某音|dou音", "抖音", text, flags=re.I)
-    text = re.sub(r"小红薯|小红📕|(?<!小)红薯|(?<!小)红书", "小红书", text)
-    text = re.sub(r"[抄炒超吵钞]小说", "抄小说", text)
-    text = re.sub(r"代fa", "代发", text, flags=re.I)
-    text = re.sub(r"\d+(?:\.\d+)?", "数值", text)
-    text = "".join(char for char in text.casefold() if char.isalnum())
-    while len(text) >= 24 and len(text) % 2 == 0 and text[:len(text)//2] == text[len(text)//2:]:
-        text = text[:len(text)//2]
-    return text
-
-
 def write_csv(path: Path, fields: list[str], rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8-sig", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fields, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    pd.DataFrame(rows, columns=fields, dtype=object).to_csv(path, index=False, encoding="utf-8-sig", mode="x")
 
 
 def prepare(input_dir: Path, output_dir: Path, target: int = 1500, seed: int = 20261101,
@@ -238,8 +217,8 @@ def prepare(input_dir: Path, output_dir: Path, target: int = 1500, seed: int = 2
               "## 来源与限制", "", report["source"], "", report["license"], ""]
     lines += ["- "+note for note in report["limitations"]]
     lines += ["", "## 复现", "", "在项目根目录运行，使用新的输出目录：", "", "```powershell",
-              f"uv run python -m scripts.prepare_chineseharm data/raw/chineseharm/benchmark data/processed/chineseharm_reproduced --target {target} --seed {seed}",
-              "```", "", "输入仅为四个指定类别；原文件名与本地英文文件名、校验值见 `data/raw/chineseharm/manifest.json`。"]
+              f"uv run --project backend python -m backend.app.commands.prepare_chineseharm backend/data/raw/chineseharm/benchmark backend/data/processed/chineseharm_reproduced --target {target} --seed {seed}",
+              "```", "", "输入仅为四个指定类别；原文件名与本地英文文件名、校验值见 `backend/data/raw/chineseharm/manifest.json`。"]
     targets["md"].write_text("\n".join(lines)+"\n", encoding="utf-8")
     print(json.dumps({"totals": report["totals"], "categories": category_stats, "shortfall": report["shortfall"]}, ensure_ascii=False, indent=2))
     return report

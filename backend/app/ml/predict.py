@@ -1,20 +1,14 @@
-"""加载已保存的词频向量器及手写分类器，预测单条原文；不训练。"""
+"""使用保存的 sklearn Pipeline 预测留言并解释贝叶斯贡献词。"""
 
 import argparse
 import json
+from collections import Counter
 from dataclasses import asdict, dataclass, field
-from typing import Literal, TypedDict
+from typing import Literal
 
 import joblib
 
-from backend.app.ml.train import DEFAULT_MODEL_PATH
-
-
-class WordContribution(TypedDict):
-    word: str
-    count: int
-    contribution: float
-    direction: Literal["normal", "spam"]
+from backend.app.ml.dataset import DEFAULT_MODEL_PATH
 
 
 @dataclass
@@ -23,7 +17,7 @@ class PredictionResult:
     model_name: str
     label: int | None = None
     spam_probability: float | None = None
-    explanation: list[WordContribution] = field(default_factory=list)
+    explanation: list[dict] = field(default_factory=list)
 
 
 def predict_text(content: str, model_path=DEFAULT_MODEL_PATH) -> PredictionResult:
@@ -31,29 +25,31 @@ def predict_text(content: str, model_path=DEFAULT_MODEL_PATH) -> PredictionResul
     if not content.strip():
         raise ValueError("留言内容不能为空")
 
-    artifact = joblib.load(model_path)
-    vectorizer = artifact["vectorizer"]
-    model = artifact["model"]
-    model_name = artifact["model_name"]
-    threshold = artifact["threshold"]
+    pipeline = joblib.load(model_path)
+    vectorizer, model = pipeline[0], pipeline[-1]
+    model_name = pipeline.model_name_
 
-    # tokenizer 仍由 artifact 内的向量器调用；线上不额外处理一遍原文。
     row = vectorizer.transform([content]).tocsr()
     if row.nnz == 0:
         return PredictionResult(status="no_features", model_name=model_name)
 
     probability = float(model.predict_proba(row)[0, 1])
-    label = int(probability >= threshold)
+    label = int(probability >= model.threshold)
     direction = "spam" if label == 1 else "normal"
     words = vectorizer.get_feature_names_out()
-    contributions: list[WordContribution] = []
+    counts = Counter(vectorizer.build_tokenizer()(content))
+    contributions = []
     for index, count in zip(row.indices, row.data):
+        word = str(words[index])
+        # 信号 token 只参与打分，不作为可读的贡献词展示。
+        if word.startswith("__ad_"):
+            continue
         value = float(count * (model.feature_log_prob_[1, index] - model.feature_log_prob_[0, index]))
         if value == 0:
             continue
         contributions.append({
-            "word": str(words[index]),
-            "count": int(count),
+            "word": word,
+            "count": counts[word],
             "contribution": value,
             "direction": "spam" if value > 0 else "normal",
         })

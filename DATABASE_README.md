@@ -9,13 +9,13 @@
 | 入口 | 作用 |
 | --- | --- |
 | [database.py](backend/app/database.py) | 创建连接引擎、会话工厂、ORM 基类，提供 UTC 时间函数和请求会话 |
-| [config.py](backend/app/config.py) | 从项目根目录 `.env` 读取 `DATABASE_URL` 等配置 |
+| [config.py](backend/app/config.py) | 从 `backend/.env` 读取 `DATABASE_URL` 等配置 |
 | [models](backend/app/models/) | 定义四张表的字段、外键、索引和约束 |
 | [service](backend/app/service/) | 实际执行查询、插入和更新的业务方法 |
 | [api](backend/app/api/) | 接收 HTTP 请求，调用业务方法；完整路由前缀为 `/api/v1` |
-| [scripts](scripts/) | 建表、初始化账号、升级旧表结构 |
+| [后端管理命令](backend/app/commands/) | 建表、初始化账号、升级旧表结构 |
 
-连接配置格式见 [.env.example](.env.example)：
+连接配置格式见 [backend/.env.example](backend/.env.example)：
 
 ```dotenv
 DATABASE_URL=mysql+pymysql://campus_app:your_password@127.0.0.1:3306/campus_message?charset=utf8mb4
@@ -217,20 +217,20 @@ deleted_at = NULL
 
 ## 6. 建表、初始化与迁移方法
 
-在项目根目录运行以下命令。先准备 MySQL 数据库、账号及 `.env`；初始化脚本只建表，不创建数据库和数据库账号。已有数据库升级前停止后端并备份数据；MySQL 的 `ALTER TABLE` 可能隐式提交，不能依赖外层事务保证所有结构变更一起回滚。
+在项目根目录运行以下命令。先准备 MySQL 数据库、账号及 `backend/.env`；初始化脚本只建表，不创建数据库和数据库账号。已有数据库升级前停止后端并备份数据；MySQL 的 `ALTER TABLE` 可能隐式提交，不能依赖外层事务保证所有结构变更一起回滚。
 
 ### 6.1 新数据库建表与初始化账号
 
 ```powershell
-python -m scripts.init_db
+python -m backend.app.commands.init_db
 # 可选：交互设置初始账号密码
-python -m scripts.init_db --seed-users
+python -m backend.app.commands.init_db --seed-users
 ```
 
 | 方法 | 修改对象 | 具体效果 |
 | --- | --- | --- |
-| [`scripts.init_db.main()`](scripts/init_db.py) | 四张业务表的结构 | 调用 `Base.metadata.create_all()`，创建缺失表及模型定义的索引和约束；不修改已存在表的结构，不清空数据 |
-| [`scripts.init_db.seed_users()`](scripts/init_db.py) | `users`：INSERT | 为缺失的 `student`、`admin` 账号写入 `username`、`nickname`、`password_hash`、`role`；自增 `id`，自动填充 `created_at/updated_at` |
+| [`backend.app.commands.init_db.main()`](backend/app/commands/init_db.py) | 四张业务表的结构 | 调用 `Base.metadata.create_all()`，创建缺失表及模型定义的索引和约束；不修改已存在表的结构，不清空数据 |
+| [`backend.app.commands.init_db.seed_users()`](backend/app/commands/init_db.py) | `users`：INSERT | 为缺失的 `student`、`admin` 账号写入 `username`、`nickname`、`password_hash`、`role`；自增 `id`，自动填充 `created_at/updated_at` |
 
 `seed_users()` 中昵称等于用户名，角色分别为 `student` 和 `admin`。已有同名账号会跳过，不重置密码和角色；新账号在同一账号初始化事务中提交，取消输入会回滚本次账号写入。它不回滚此前已经完成的建表操作。
 
@@ -239,16 +239,16 @@ python -m scripts.init_db --seed-users
 按旧库缺失的功能执行对应迁移；以下三个脚本均仅支持 MySQL，并设计为可重复运行。
 
 ```powershell
-python -m scripts.migrate_users
-python -m scripts.migrate_record_timestamps
-python -m scripts.migrate_review_sources
+python -m backend.app.commands.migrate_users
+python -m backend.app.commands.migrate_record_timestamps
+python -m backend.app.commands.migrate_review_sources
 ```
 
 | 方法 | 表 | 修改的字段或约束 | 旧数据处理 |
 | --- | --- | --- | --- |
-| [`scripts.migrate_users.main()`](scripts/migrate_users.py) | `users` | `username` 调整为 VARCHAR(20) NOT NULL；补充或调整 `nickname` 为 VARCHAR(20) NOT NULL；补充或调整 `updated_at` 为 DATETIME NOT NULL | NULL 或空白昵称用 `username` 回填；NULL 更新时间用 `created_at` 回填；修改前检查用户名为 3～20 字符、已有昵称不超 20 字符 |
-| [`migrate_record_timestamps()`](scripts/migrate_record_timestamps.py) | `annotation_records`、`review_records` | 补充或调整 `updated_at` 为 DATETIME NOT NULL | 只对 NULL 的 `updated_at` 用 `created_at` 回填，保留已有非空值；修改前检查两表存在、创建时间字段存在且无 NULL |
-| [`migrate_review_sources()`](scripts/migrate_review_sources.py) | `review_records`；只读 `users` 校验审核人 | 补充 `review_source`，必要时设为 NOT NULL 并默认 `manual`；补充可空的 `model_name_snapshot`、`spam_probability_snapshot`、`normal_threshold_snapshot`；将 `reviewer_id` 调整为可空；移除下述旧 CHECK | 新增来源列时旧记录标记为 `manual`；已有来源列时只回填来源为 NULL 且有审核人的记录；保留原审核人和已有快照，不推测旧模型依据 |
+| [`backend.app.commands.migrate_users.main()`](backend/app/commands/migrate_users.py) | `users` | `username` 调整为 VARCHAR(20) NOT NULL；补充或调整 `nickname` 为 VARCHAR(20) NOT NULL；补充或调整 `updated_at` 为 DATETIME NOT NULL | NULL 或空白昵称用 `username` 回填；NULL 更新时间用 `created_at` 回填；修改前检查用户名为 3～20 字符、已有昵称不超 20 字符 |
+| [`migrate_record_timestamps()`](backend/app/commands/migrate_record_timestamps.py) | `annotation_records`、`review_records` | 补充或调整 `updated_at` 为 DATETIME NOT NULL | 只对 NULL 的 `updated_at` 用 `created_at` 回填，保留已有非空值；修改前检查两表存在、创建时间字段存在且无 NULL |
+| [`migrate_review_sources()`](backend/app/commands/migrate_review_sources.py) | `review_records`；只读 `users` 校验审核人 | 补充 `review_source`，必要时设为 NOT NULL 并默认 `manual`；补充可空的 `model_name_snapshot`、`spam_probability_snapshot`、`normal_threshold_snapshot`；将 `reviewer_id` 调整为可空；移除下述旧 CHECK | 新增来源列时旧记录标记为 `manual`；已有来源列时只回填来源为 NULL 且有审核人的记录；保留原审核人和已有快照，不推测旧模型依据 |
 
 审核来源迁移在修改前拒绝无法确定来源的旧记录，以及引用不存在审核人的记录。它仅在约束存在时移除以下旧版本 CHECK：
 

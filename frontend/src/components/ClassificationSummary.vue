@@ -6,25 +6,24 @@ const props = defineProps({ message: Object })
 
 // 成功预测才展示概率和模型名；其余状态只说明原因，交给人工标注。
 const prediction = computed(() => {
-  const message = props.message
-  if (!message || message.prediction_status !== 'success') return null
+  if (props.message.prediction_status !== 'success') return null
   return {
-    label: labels[message.predicted_label] || '未知',
-    percent: message.predicted_probability == null
+    label: labels[props.message.predicted_label] || '未知',
+    percent: props.message.predicted_probability == null
       ? ''
-      : `垃圾概率 ${(message.predicted_probability * 100).toFixed(1)}%`,
-    model: message.model_name || '未知模型',
+      : `垃圾概率 ${(props.message.predicted_probability * 100).toFixed(1)}%`,
+    model: props.message.model_name || '未知模型',
   }
 })
 
 // 后端已按贡献绝对值降序给出最多 5 个词，这里只展示词、词频和方向，不重算贡献。
 const contributions = computed(() => {
   // 只有预测成功时的解释才可信；其余状态即使残留旧 JSON 也不展示。
-  if (props.message?.prediction_status !== 'success') return []
-  const list = props.message?.prediction_explanation
+  if (props.message.prediction_status !== 'success') return []
+  const list = props.message.prediction_explanation
   if (!Array.isArray(list)) return []
   return list
-    .filter(item => item && item.word)
+    .filter(item => item?.word)
     .slice(0, 5)
     .map(item => ({ word: item.word, count: item.count ?? 0, direction: item.direction === 'spam' ? '垃圾' : '正常' }))
 })

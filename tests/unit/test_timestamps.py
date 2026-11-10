@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 
 from backend.app.models import AnnotationRecord, Message, ReviewRecord, User
-from scripts import migrate_record_timestamps
+from backend.app.commands import migrate_record_timestamps
 
 
 @pytest.mark.parametrize("model_name", ["user", "message", "annotation", "review"])

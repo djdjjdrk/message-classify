@@ -1,6 +1,28 @@
 """纠正训练集构造与对照表格式的单元测试（不连接数据库）。"""
 
-from scripts.retrain_from_annotations import build_corrected_training, format_report
+from sklearn.pipeline import Pipeline
+
+from backend.app.commands.retrain_from_annotations import (
+    build_corrected_training, evaluate_on_test, format_report, train_from_samples,
+)
+from backend.app.ml.naive_bayes import MultinomialNaiveBayes
+
+
+def test_annotation_retraining_uses_the_shared_pipeline(tmp_path):
+    samples = [
+        {"content": "图书馆 自习", "label": "0"},
+        {"content": "同学 自习", "label": "0"},
+        {"content": "免费 领取", "label": "1"},
+        {"content": "免费 领取", "label": "1"},
+    ]
+    path = tmp_path / "pipeline.joblib"
+    pipeline = train_from_samples(samples, path, "corrected", threshold=0.36)
+    assert isinstance(pipeline, Pipeline)
+    assert isinstance(pipeline[-1], MultinomialNaiveBayes)
+    assert pipeline[-1].threshold == 0.36
+    report = evaluate_on_test(path, samples)
+    assert report["model_name"] == "corrected"
+    assert report["sample_count"] == 4 and report["accuracy"] == 1
 
 
 def test_updates_existing_sample_and_appends_new_one():
@@ -46,6 +68,23 @@ def test_same_label_does_not_count_as_change():
 
     assert stats["updated"] == 1
     assert stats["label_changed"] == 0
+    assert samples[0]["label"] == "1"
+
+
+def test_template_variants_of_protected_evaluation_cannot_enter_retraining():
+    train = [{"content": "图书馆可以自习", "label": "0", "source": "campus_posts"}]
+    test = [{"content": "专业补单刷销量，微信: abc12345，10元一单", "label": "1"}]
+    corrections = {"专业补单刷销量，微信: xyz98765，20元一单": 1}
+    samples, stats = build_corrected_training(corrections, train, test)
+    assert samples == train
+    assert stats["excluded_group_overlap"] == 1
+    assert stats["added"] == 0
+
+
+def test_corrections_do_not_mutate_original_training_snapshot():
+    train = [{"content": "食堂最近人很多", "label": "0", "source": "campus_posts"}]
+    samples, _ = build_corrected_training({"食堂最近人很多": 1}, train, [])
+    assert train[0]["label"] == "0"
     assert samples[0]["label"] == "1"
 
 

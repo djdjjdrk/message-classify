@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from scripts.prepare_chineseharm import CATEGORIES, eligible, normalize, prepare, template_key
+from backend.app.commands.prepare_chineseharm import CATEGORIES, eligible, normalize, prepare, template_key
 
 
 @pytest.mark.parametrize("text,category", [

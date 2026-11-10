@@ -62,6 +62,15 @@ def test_zero_feature_sample_uses_class_prior():
     np.testing.assert_array_equal(model.predict(csr_matrix((1, 2))), [0])
 
 
+def test_custom_class_prior_overrides_training_frequency():
+    model = MultinomialNaiveBayes(class_prior=(0.5, 0.5)).fit(
+        np.array([[1, 0], [2, 0], [1, 0], [0, 1]]),
+        np.array([0, 0, 0, 1]),
+    )
+    np.testing.assert_allclose(np.exp(model.class_log_prior_), [0.5, 0.5])
+    np.testing.assert_allclose(model.predict_proba(csr_matrix((1, 2))), [[0.5, 0.5]])
+
+
 def test_equal_probability_uses_spam_threshold():
     model = MultinomialNaiveBayes().fit(np.ones((2, 2)), np.array([0, 1]))
     np.testing.assert_allclose(model.predict_proba([[3, 2]]), [[0.5, 0.5]])

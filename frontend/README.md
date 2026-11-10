@@ -7,7 +7,7 @@ Vue 3 + Vue Router + Vite，使用原生表单和少量共享组件，直接调�
 要求 Node.js 22.12+ 或 24 LTS。先在项目根目录启动原有后端：
 
 ```powershell
-uv run uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+uv run --project backend uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 在另一个终端运行：
@@ -60,7 +60,7 @@ npm run preview
 
 `npm test` 使用 Node 内置测试运行器，验证请求契约、登录失效、检索分页、统计加载、分类组件实际渲染及时间显示。分类测试覆盖人工纠正后原始预测、贡献方向与数量、零概率和无特征反馈；旧解释中的 `weight` 不被当作新贡献值。`npm run build` 生成 `dist/`；`preview` 仅供本地检查，也会代理 `/api`。生产部署可参考 `nginx.conf.example`，由 Nginx 托管 `dist/` 并代理 FastAPI。路由使用 hash 模式，刷新不会要求后端提供页面路由。
 
-浏览器联调可使用隔离的内存数据库：在项目根目录运行 `uv run python frontend/tests/serve_backend.py`，然后在前端终端运行：
+浏览器联调可使用隔离的内存数据库：在项目根目录运行 `uv run --project backend python frontend/tests/serve_backend.py`，然后在前端终端运行：
 
 ```powershell
 $env:VITE_API_PROXY_TARGET = 'http://127.0.0.1:8001'

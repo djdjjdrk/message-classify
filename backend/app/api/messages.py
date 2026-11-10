@@ -51,11 +51,7 @@ def get_public_messages(
     messages, total = list_public_messages(db, page=page, page_size=page_size, keyword=keyword)
     message_list = []
     for message in messages:
-        can_delete = False
-        if user.role == "admin":
-            can_delete = True
-        elif message.author_id == user.id:
-            can_delete = True
+        can_delete = user.role == "admin" or message.author_id == user.id
         message_data = PublicMessageResponse(
             id=message.id,
             content=message.content,

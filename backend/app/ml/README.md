@@ -1,120 +1,53 @@
-# ML 使用说明
+# 模型训练与评估
 
-按照“读取数据 → 清洗检查 → 划分数据 → 训练集提取特征 → 测试集转换 → 训练模型 → 预测评估”的顺序，实现多项式朴素贝叶斯。当前离线代码、模型保存、加载评估、原文预测、发布接入、贡献词解释及人工纠正后重训对比均已实现。
+模型采用 sklearn Pipeline，依次执行 TF-IDF 和手写多项式朴素贝叶斯。
 
-## 当前产物（2026-11-01）
+## 代码分工
 
-- `data/processed/split/train.csv`：3,347 条；`test.csv`：837 条。
-- `data/processed/features/`：训练词表、训练及测试词频矩阵和标签。
-- `artifacts/models/baseline/pipeline.joblib`：`baseline_v1`，保存分类器、向量器及训练元数据的字典；默认不覆盖已有文件。
-- `artifacts/models/baseline/evaluation/`：主测试集准确率 98.33%、垃圾类精确率/召回率/F1 均为 97.81%，14 条误判、2 条全零特征。
-- `data/processed/extra_test.csv` 及 `extra_features/`：201 条 `chatgpt_synthetic` 合成补充样本及特征；`artifacts/models/baseline/extra_evaluation/` 准确率 80.60%、垃圾类 F1 77.97%，39 条误判。
+| 文件 | 职责 |
+| --- | --- |
+| train.py | make_pipeline 组织训练，TunedThresholdClassifierCV 选择阈值 |
+| features.py | jieba 分词、广告信号和 TfidfVectorizer 配置 |
+| dataset.py | pandas 读写训练 CSV，统一文本格式 |
+| naive_bayes.py | 手写先验、平滑、条件概率和预测得分 |
+| grouping.py | sklearn 相似度检索、分组划分和 SciPy 连通分量 |
+| predict.py | 加载 Pipeline、处理未知词并展示贡献词 |
+| evaluate.py | sklearn 指标和分类报告，pandas 整理、导出预测明细 |
 
-指标来自已有报告，本次未重新运行。两份评估分别报告；合成样本不能替代独立真实数据。当前清洗实现了规范化后精确去重和冲突标签排除，尚未实现近似重复及模板分组划分；完整人工复核和脱敏仍需完成。以下步骤同时保留各阶段的检查要求，不能将检查目标全部视为已完成。
+## 训练
 
-此前预留的接口契约及对应测试已移除。下面按开发顺序说明各步骤。
+在包含 backend、frontend 的目录执行以下命令。
 
-只有 `naive_bayes.py` 中的朴素贝叶斯核心计算自行实现：类别和词频统计、先验、拉普拉斯平滑、对数得分及后验概率归一化。其余通用功能优先使用现成库：
+~~~powershell
+uv run --project backend python -m backend.app.ml.train --overwrite
+~~~
 
-- 数据划分：`sklearn.model_selection.train_test_split`。
-- 中文分词和词频特征：`jieba`、`sklearn.feature_extraction.text.CountVectorizer`。
-- 准确率、精确率、召回率、F1 和混淆矩阵：`sklearn.metrics`。
-- 稀疏矩阵及标签保存：SciPy、NumPy；模型保存和加载：`joblib`。
-- IAD 原始 Excel 读取：`openpyxl`；CSV、JSON 和文本规范化使用 Python 标准库。
+训练读取 backend/data/split/train.csv 和 backend/data/processed/weak_spam.csv。
+后者是已准备好的 1,551 条规则弱标注广告快照，尚未逐条人工复核。
+困难正常样本额外重复两次，最终训练记录共 6,120 条。
 
-标签判定、冲突样本排除、来源追溯等项目规则仍由项目代码处理。
+内部验证采用模板分组隔离，选择精确率达标优先、F2 最高的阈值。
+当前阈值约为 0.36，类别先验为 0.5/0.5，平滑参数为 1。
+保存的 pipeline.joblib 是完整 sklearn Pipeline，包含向量器、手写分类器及模型名称和阈值。
 
-## 1. 读取数据
+## 预测和评估
 
-参考图从 JSONL 开始，本项目已有整理后的 CSV，优先读取：
+~~~powershell
+uv run --project backend python -m backend.app.ml.predict "图书馆几点关门"
+uv run --project backend python -m backend.app.ml.evaluate
+uv run --project backend python -m backend.app.ml.evaluate --test-csv backend/data/split/source_holdout.csv --output-dir backend/artifacts/models/final/source_evaluation
+~~~
 
-- `data/processed/campus_posts.csv`
-- `data/processed/iad_spam.csv`
-- `data/processed/chineseharm_spam.csv`
+评估目录输出 metrics.json、report.txt、predictions.csv 和 errors.csv。
+同分布测试准确率为 98.16%，IAD 来源压力测试垃圾召回率为 79.17%。
+两种评估共享正常样本，分别报告。来源偏差及弱标注噪声仍需在真实校园数据上检验。
+线上全未知词返回 no_features，离线全零特征按类别先验计分。
 
-统一取得 `content`、`label`，保留来源用于追溯。CSV 和机器学习模块统一使用 `0`（正常）、`1`（垃圾），读取 CSV 时保留字符串形式。原始 JSONL、XLSX、JSON 留作复现，不必重复开发已有的来源处理脚本。
+## 人工纠正后重训
 
-完成结果：得到统一格式的候选样本，打印各来源及各类别数量。此时的候选标签还需要确认。
+~~~powershell
+uv run --project backend python -m backend.app.commands.retrain_from_annotations
+~~~
 
-## 2. 数据清洗、去重、标签检查
-
-- 检查空正文、空标签和非法标签，统一空白等基础格式。
-- 合并三个来源后跨来源去重，检查相同文本是否有冲突标签；冲突和不确定样本先人工确认或排除。
-- 检查近似重复和广告模板，避免同一内容的变体分散到训练集和测试集。
-- 核对正常、垃圾样本的判定标准，记录清洗前后数量及类别分布。
-
-完成结果：得到标签已确认的干净数据。已有单来源清洗结果可以复用，跨来源检查仍需完成。
-
-## 3. 划分训练集和测试集（8:2）
-
-使用固定随机种子（如 `42`），尽量保持两类比例，划分 80% 训练集和 20% 测试集。同一重复或模板组放在同一侧；必要时允许实际比例略有偏差。
-
-完成结果：保存固定的训练集和测试集，确认两侧都包含两个类别，且没有重复文本或模板组交叉。
-
-**必须先划分，再拟合词表。测试集不参与词表生成、词频筛选、停用词调整或模型参数选择。需要调参时，从训练集内部划分验证集。**
-
-## 4. 在训练集上拟合词表，生成词频矩阵
-
-先实现统一的文本预处理和中文分词，再只用训练集建立“词 → 列号”的词表，将每条训练文本转换为词频向量。
-
-基础方案使用词频特征。可以使用 jieba 分词、CountVectorizer 提取特征，分类算法自行实现。
-
-完成结果：训练词表、训练集词频矩阵 `X_train` 和标签 `y_train`。检查矩阵行数等于训练样本数、列数等于词表大小，并手工核对少量文本的词频。
-
-## 5. 使用训练词表生成测试集词频矩阵
-
-测试文本使用相同的预处理和分词规则，只调用已拟合特征提取器的 `transform`；忽略词表外的词，不新增词、不重新拟合。
-
-完成结果：测试集词频矩阵 `X_test` 和标签 `y_test`。确认训练、测试矩阵列数一致，同一列对应同一个词，并统计全零特征样本数。
-
-## 6. 使用训练集训练自行实现的朴素贝叶斯
-
-按以下顺序实现核心计算：
-
-1. 统计每个类别的样本数，计算先验概率 `P(c) = N_c / N`。
-2. 按类别累加训练矩阵中的词频。
-3. 使用拉普拉斯平滑计算 `P(w|c) = (F_cw + alpha) / (sum_v F_cv + alpha * V)`，初始 `alpha = 1.0`。
-4. 保存类别映射、先验和词条件概率的对数值。
-
-完成结果：用可手算的小样本核对统计结果、先验和平滑概率，再训练完整训练集。核心算法不能由 sklearn 的现成分类器替代；第三方分类器可以用于独立对照。
-
-## 7. 使用测试集预测和评估
-
-先实现单条样本预测，再实现批量预测和指标计算：
-
-- 计算各类得分：`score(c, x) = log P(c) + sum_w x_w * log P(w|c)`。
-- 对得分做数值稳定的归一化，取得类别 `1`（垃圾）的概率；大于等于 `0.5` 判为 `1`，否则为 `0`。
-- 输出准确率、精确率、召回率、F1 和混淆矩阵，`1`（垃圾）为正类；指标分母为零时取 0。
-- 全零特征样本按类别先验预测，计入评估并单独统计，不丢弃。
-- 查看误判案例，区分正常被判垃圾、垃圾被判正常；若据此修改方案，需要新的独立测试数据才能报告最终效果。
-
-完成结果：得到第一版可复现的离线评估结果，并确认训练和测试使用同一词表及同一套预测逻辑。
-
-## 离线流程完成后的顺序
-
-8. **模型保存与加载（已实现）**：`train.py` 保存分类器、向量器、类别映射、阈值、训练时间和模型名等元数据，`evaluate.py` 加载模型评估；分词及预处理仍依赖项目代码，当前没有单独的预处理配置快照。
-9. **单条文本预测入口（已实现）**：`predict.py` 的 `predict_text(content, model_path)` 加载现有向量器与 `MultinomialNaiveBayes`，只调用 `transform`，返回 `PredictionResult`；字段为 `status/label/spam_probability/explanation/model_name`，ML 标签为整数 `0/1`。空原文或全空白抛出 `ValueError`，部分未知词忽略未知部分，全未知词或纯标点等无特征输入返回 `no_features`，标签和概率为空、解释为 `[]`。
-10. **接入后端（已实现）**：发布业务层将 `0/1` 转成数据库的 `normal/spam`，保存状态、类别、垃圾概率、模型名及解释。模型缺失记为 `no_model`，损坏或计算异常记为 `error`；均保存待审核留言。人工标签优先，原始预测保留。成功预测为正常且垃圾概率不超过 `0.25` 时自动通过，其余仍由人工审核；自动通过阈值由后端 `AUTO_APPROVE_SPAM_THRESHOLD` 配置，不改变模型分类阈值。
-11. **人工标注后的重训（已实现）**：`scripts/retrain_from_annotations.py` 读取数据库中有人工标签的留言，按规范化正文去重、排除与固定测试集重合的正文，更新或补充训练集，保存 `data/processed/split/train_corrected.csv`；用纠正后的训练集重新拟合词表并训练同款手写算法，输出 `artifacts/models/retrained/pipeline.joblib`；两个模型各自用自己的词表转换同一份测试集，输出 `comparison.json` / `comparison.md` 对照表。冻结的测试集保持隔离，模型预测不作为真实标签。
-
-```powershell
-uv run python -m scripts.retrain_from_annotations
-uv run python -m scripts.retrain_from_annotations --overwrite   # 补充标注后重跑
-```
-
-上述离线模块已实现，可依次运行 `python -m backend.app.ml.dataset`、`python -m backend.app.ml.features`、`python -m backend.app.ml.train` 和 `python -m backend.app.ml.evaluate`。运行训练前请确认标签已审核；评估阶段只加载已有模型，不重新训练。
-
-## 原文预测与主要依据
-
-`TextPreprocessor` 在 `preprocessing.py`，复用 `dataset.normalize_content` 的 NFKC、格式字符移除及空白合并规则，并沿用原 jieba 分词及纯标点过滤规则。`features.tokenize` 保留旧函数路径并委托给该类，已保存的 joblib 向量器可以直接加载，无需重训。在线由模型内的向量器调用这一入口，不另加预处理规则。
-
-```powershell
-uv run python -m backend.app.ml.predict "今晚图书馆有人一起自习吗？"
-uv run python -m backend.app.ml.predict "UniqueUnseenTokenqzxv"
-```
-
-后端 `MODEL_PATH` 指向现有 `pipeline.joblib`，相对路径以项目根目录解析。新检出仓库需要先放置已有的可信模型文件；预测入口本身不训练，也不覆盖模型。
-
-每个已知词贡献为 `count × (log P(w|spam) - log P(w|normal))`。解释字段保存 `word/count/contribution/direction`；正值支持 `spam`，负值支持 `normal`，零贡献不展示。先按是否支持预测类别排序，再按贡献绝对值降序，最多返回 5 个词；若支持词不足，可展示带方向的反向贡献。按当前页面要求，仅显示实际贡献词及方向，不显示公式、标题及空贡献说明。最高词频不等于主要分类依据，后验垃圾概率也不是词贡献之和，类别先验也参与模型得分。
-
-**线上与离线的全零样本策略分别报告**：现有主测试集的 2 条全零样本按先验预测，计入 837 条评估；这些历史指标不代表线上拒判覆盖率。线上无已知特征返回 `no_features`，不写入成功类别或概率，显示“无已知特征，请人工标注”。`evaluate.py` 新报告另记录 `offline_zero_feature_policy` 和 `online_zero_feature_policy`，评估计算及已有报告保持原样；本次接入不重新训练基线或改写历史指标。
+人工纠正更新训练快照后，复用同一套 Pipeline 和阈值选择流程。
+新模型及对照结果保存于 backend/artifacts/models/retrained/。

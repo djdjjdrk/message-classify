@@ -1,4 +1,4 @@
-"""核算在线预测、贡献排序和旧 tokenizer 兼容性；禁止拟合。"""
+"""核算在线预测、贡献排序和Pipeline 加载；禁止拟合。"""
 
 import math
 from dataclasses import asdict
@@ -14,7 +14,7 @@ from backend.app.ml.predict import predict_text
 from backend.app.ml.preprocessing import TextPreprocessor
 
 
-def test_preprocessor_keeps_existing_rules_and_legacy_entry():
+def test_preprocessor_and_pipeline_tokenizer_share_rules():
     preprocessor = TextPreprocessor()
     raw = "\ufeff 不，钱！Ａ１ １２３\n\u200b"
     assert preprocessor.normalize(raw) == "不,钱!A1 123"
@@ -28,8 +28,8 @@ def test_empty_input_is_parameter_error_before_loading(content, tmp_path):
         predict_text(content, tmp_path / "missing.joblib")
 
 
-def test_predict_uses_saved_transform_only_and_ignores_unknown_parts(prediction_artifact, monkeypatch):
-    path, artifact = prediction_artifact
+def test_predict_uses_saved_transform_only_and_ignores_unknown_parts(prediction_pipeline, monkeypatch):
+    path, pipeline = prediction_pipeline
     original = path.read_bytes()
 
     def forbidden_fit(*args, **kwargs):
@@ -49,15 +49,15 @@ def test_predict_uses_saved_transform_only_and_ignores_unknown_parts(prediction_
         "word": "免费", "count": 2, "contribution": pytest.approx(2 * math.log(12.5)), "direction": "spam",
     }
     assert path.read_bytes() == original
-    assert artifact["vectorizer"].tokenizer is tokenize
-    assert joblib.load(path)["vectorizer"].tokenizer is tokenize
+    assert pipeline[0].tokenizer is tokenize
+    assert joblib.load(path)[0].tokenizer is tokenize
 
 
 @pytest.mark.parametrize("content", ["UniqueUnseenToken", "！！！", "\u200b\ufeff"])
-def test_online_zero_features_abstains_but_offline_retains_prior(prediction_artifact, content, monkeypatch):
-    path, artifact = prediction_artifact
-    row = artifact["vectorizer"].transform([content])
-    assert artifact["model"].predict_proba(row).tolist() == [[0.5, 0.5]]
+def test_online_zero_features_abstains_but_offline_retains_prior(prediction_pipeline, content, monkeypatch):
+    path, pipeline = prediction_pipeline
+    row = pipeline[0].transform([content])
+    assert pipeline[-1].predict_proba(row).tolist() == [[0.5, 0.5]]
 
     def forbidden_prediction(*args):
         raise AssertionError("在线全零特征不得当作成功预测")
@@ -69,8 +69,8 @@ def test_online_zero_features_abstains_but_offline_retains_prior(prediction_arti
     assert result.explanation == []
 
 
-def test_ranks_contribution_not_frequency_and_limits_to_five(prediction_artifact):
-    path, _ = prediction_artifact
+def test_ranks_contribution_not_frequency_and_limits_to_five(prediction_pipeline):
+    path, _ = prediction_pipeline
     result = predict_text("共同 " * 20 + "学习 免费 领取 中奖 兼职 刷单 返利", path)
     assert result.label == 1
     assert len(result.explanation) == 5
@@ -79,10 +79,10 @@ def test_ranks_contribution_not_frequency_and_limits_to_five(prediction_artifact
     assert "共同" not in [item["word"] for item in result.explanation]
 
 
-def test_normal_support_is_first_even_if_opposing_term_has_larger_contribution(prediction_artifact):
-    path, artifact = prediction_artifact
-    artifact["model"].class_log_prior_ = np.log([0.999, 0.001])
-    joblib.dump(artifact, path)
+def test_normal_support_is_first_even_if_opposing_term_has_larger_contribution(prediction_pipeline):
+    path, pipeline = prediction_pipeline
+    pipeline[-1].class_log_prior_ = np.log([0.999, 0.001])
+    joblib.dump(pipeline, path)
     result = predict_text("学习 免费 免费", path)
     assert result.label == 0
     assert [item["direction"] for item in result.explanation] == ["normal", "spam"]
@@ -90,20 +90,20 @@ def test_normal_support_is_first_even_if_opposing_term_has_larger_contribution(p
     assert abs(result.explanation[1]["contribution"]) > abs(result.explanation[0]["contribution"])
 
 
-def test_prior_can_win_without_any_supporting_terms(prediction_artifact):
-    path, artifact = prediction_artifact
-    artifact["model"].class_log_prior_ = np.log([0.999, 0.001])
-    joblib.dump(artifact, path)
+def test_prior_can_win_without_any_supporting_terms(prediction_pipeline):
+    path, pipeline = prediction_pipeline
+    pipeline[-1].class_log_prior_ = np.log([0.999, 0.001])
+    joblib.dump(pipeline, path)
     result = predict_text("免费", path)
     assert result.label == 0 and result.status == "success"
     assert all(item["direction"] == "spam" for item in result.explanation)
     assert predict_text("共同", path).explanation == []
 
 
-def test_threshold_comes_from_artifact(prediction_artifact):
-    path, artifact = prediction_artifact
-    artifact["threshold"] = 0.99
-    joblib.dump(artifact, path)
+def test_threshold_comes_from_pipeline(prediction_pipeline):
+    path, pipeline = prediction_pipeline
+    pipeline[-1].threshold = 0.99
+    joblib.dump(pipeline, path)
     result = predict_text("免费", path)
     assert result.spam_probability > 0.5
     assert result.label == 0

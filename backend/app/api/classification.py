@@ -28,10 +28,9 @@ def get_classification_messages(
         if message.manual_label is not None:
             effective_label = message.manual_label
             label_source = "manual"
-        elif message.prediction_status == "success":
-            if message.predicted_label is not None:
-                effective_label = message.predicted_label
-                label_source = "model"
+        elif message.prediction_status == "success" and message.predicted_label is not None:
+            effective_label = message.predicted_label
+            label_source = "model"
 
         message_data = ClassificationMessageResponse(
             id=message.id,
