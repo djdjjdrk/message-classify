@@ -1,6 +1,6 @@
 # 数据库说明与方法读写对照
 
-本文根据当前项目的 SQLAlchemy 模型、业务方法、HTTP 路由和迁移脚本整理，说明数据库保存什么，以及每个方法会新增、修改或读取哪些表和字段。本文描述代码定义的结构，未连接实际 MySQL 实例核对已部署结构。
+本文根据当前项目的 SQLAlchemy 模型、业务方法、HTTP 路由和初始化命令整理，说明数据库保存什么，以及每个方法会新增、修改或读取哪些表和字段。字段字典以代码定义为准，答辩清理时已只读核对本地数据库中原迁移涉及的字段。
 
 ## 1. 数据库与代码入口
 
@@ -13,7 +13,7 @@
 | [models](backend/app/models/) | 定义四张表的字段、外键、索引和约束 |
 | [service](backend/app/service/) | 实际执行查询、插入和更新的业务方法 |
 | [api](backend/app/api/) | 接收 HTTP 请求，调用业务方法；完整路由前缀为 `/api/v1` |
-| [后端管理命令](backend/app/commands/) | 建表、初始化账号、升级旧表结构 |
+| [后端管理命令](backend/app/commands/) | 建表、初始化账号、人工纠正后重训 |
 
 连接配置格式见 [backend/.env.example](backend/.env.example)：
 
@@ -215,9 +215,9 @@ deleted_at = NULL
 
 分类接口返回的 `effective_label` 和 `label_source` 是即时计算的响应字段，**数据库没有这两列**。计算顺序为人工标签优先，其次是成功的模型预测，否则为未分类。公共列表的 `author_nickname`、`can_delete`，历史列表的操作人用户名和昵称同样来自关联或计算。
 
-## 6. 建表、初始化与迁移方法
+## 6. 建表与初始化方法
 
-在项目根目录运行以下命令。先准备 MySQL 数据库、账号及 `backend/.env`；初始化脚本只建表，不创建数据库和数据库账号。已有数据库升级前停止后端并备份数据；MySQL 的 `ALTER TABLE` 可能隐式提交，不能依赖外层事务保证所有结构变更一起回滚。
+在项目根目录运行以下命令。先准备 MySQL 数据库、账号及 `backend/.env`，初始化脚本根据当前模型创建缺少的业务表。
 
 ### 6.1 新数据库建表与初始化账号
 
@@ -234,33 +234,11 @@ python -m backend.app.commands.init_db --seed-users
 
 `seed_users()` 中昵称等于用户名，角色分别为 `student` 和 `admin`。已有同名账号会跳过，不重置密码和角色；新账号在同一账号初始化事务中提交，取消输入会回滚本次账号写入。它不回滚此前已经完成的建表操作。
 
-### 6.2 旧数据库迁移
+### 6.2 历史数据库升级
 
-按旧库缺失的功能执行对应迁移；以下三个脚本均仅支持 MySQL，并设计为可重复运行。
+最终答辩版本已移除三个旧数据库迁移脚本。本地数据库已具备用户昵称、用户及记录更新时间、审核来源和模型快照字段，新数据库通过初始化命令直接创建当前结构。
 
-```powershell
-python -m backend.app.commands.migrate_users
-python -m backend.app.commands.migrate_record_timestamps
-python -m backend.app.commands.migrate_review_sources
-```
-
-| 方法 | 表 | 修改的字段或约束 | 旧数据处理 |
-| --- | --- | --- | --- |
-| [`backend.app.commands.migrate_users.main()`](backend/app/commands/migrate_users.py) | `users` | `username` 调整为 VARCHAR(20) NOT NULL；补充或调整 `nickname` 为 VARCHAR(20) NOT NULL；补充或调整 `updated_at` 为 DATETIME NOT NULL | NULL 或空白昵称用 `username` 回填；NULL 更新时间用 `created_at` 回填；修改前检查用户名为 3～20 字符、已有昵称不超 20 字符 |
-| [`migrate_record_timestamps()`](backend/app/commands/migrate_record_timestamps.py) | `annotation_records`、`review_records` | 补充或调整 `updated_at` 为 DATETIME NOT NULL | 只对 NULL 的 `updated_at` 用 `created_at` 回填，保留已有非空值；修改前检查两表存在、创建时间字段存在且无 NULL |
-| [`migrate_review_sources()`](backend/app/commands/migrate_review_sources.py) | `review_records`；只读 `users` 校验审核人 | 补充 `review_source`，必要时设为 NOT NULL 并默认 `manual`；补充可空的 `model_name_snapshot`、`spam_probability_snapshot`、`normal_threshold_snapshot`；将 `reviewer_id` 调整为可空；移除下述旧 CHECK | 新增来源列时旧记录标记为 `manual`；已有来源列时只回填来源为 NULL 且有审核人的记录；保留原审核人和已有快照，不推测旧模型依据 |
-
-审核来源迁移在修改前拒绝无法确定来源的旧记录，以及引用不存在审核人的记录。它仅在约束存在时移除以下旧版本 CHECK：
-
-```text
-ck_review_records_rejection_reason
-ck_review_records_source_reviewer
-ck_review_records_spam_probability
-ck_review_records_normal_threshold
-ck_review_records_automatic_details
-```
-
-这些迁移只处理表中列出的变更，不是通用的结构同步工具。通过 `created_at` 回填的 `updated_at` 无法还原旧数据真实的修改时间。迁移里的原生 SQL UPDATE 也不会触发 ORM 的 `onupdate` 时间函数。
+需要升级开发早期的旧数据库时，可从 Git 提交 `4201ecd` 恢复迁移脚本及当时的升级说明。
 
 ## 7. 时间、事务与当前功能边界
 
@@ -269,4 +247,4 @@ ck_review_records_automatic_details
 - 业务方法负责提交事务，HTTP 路由主要负责参数校验、鉴权和响应组装。管理员限制由接口依赖执行；直接在其他 Python 代码中调用标注等服务方法时，需要调用方保证身份权限。
 - 当前业务没有物理删除、修改留言正文、修改昵称或密码、修改角色、编辑标注历史的方法。模型允许的字段更新能力不代表已经提供对应接口。
 - 发布业务层已保存 `messages.prediction_status/predicted_label/predicted_probability/prediction_explanation/model_name`，ML 模块只计算，不访问数据库。本次复用已有列，无新增表或迁移，详见 [ML 使用说明](backend/app/ml/README.md)。
-- 人工审核、发布时正常留言自动通过及审核历史查询已有实现。自动通过复用现有字段，无新增表或列；旧库需按已有迁移说明确认 `reviewer_id` 可空、审核来源及快照列已存在。
+- 人工审核、发布时正常留言自动通过及审核历史查询已有实现。自动通过使用可空的 `reviewer_id`、审核来源及模型快照列，当前模型和本地数据库已具备这些字段。

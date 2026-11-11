@@ -1,13 +1,6 @@
-"""人工纠正 → 离线重训 → 同一测试集对比。
+"""读取人工标签，更新训练快照并复用 Pipeline 重训，输出固定测试集对照。
 
-流程：
-1. 从数据库读取未删除且有人工标签的留言，normal/spam 转成 0/1；
-2. 按规范化正文去重，原训练集中已有的正文更新标签，新增正文补进训练集；
-3. 排除与同分布测试及来源留出集关联的正文、模板和近似重复组，保存纠正训练快照；
-4. 用纠正后的训练集拟合新词表并训练同款手写朴素贝叶斯，保存独立模型目录；
-5. 用同一份固定测试集分别评估原模型和新模型，输出准确率、精确率、召回率和 F1 对照。
-
-测试集和原模型保持不变；模型预测不作为真实标签。指标持平或下降也如实输出。
+训练数据按正文去重，并排除与测试及来源留出集关联的模板、近似重复组。
 
 用法：
     uv run --project backend python -m backend.app.commands.retrain_from_annotations
@@ -21,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import joblib
+import pandas as pd
 from sqlalchemy import select
 
 from backend.app.database import SessionLocal
@@ -42,23 +36,18 @@ def load_corrections():
     """读取人工标签，按规范化正文去重；同一正文保留最近更新的一条。"""
     with SessionLocal() as session:
         rows = session.execute(
-            select(Message.content, Message.manual_label, Message.updated_at)
+            select(Message.content, Message.manual_label)
             .where(Message.manual_label.is_not(None))
             .where(Message.deleted_at.is_(None))
             .order_by(Message.updated_at.asc(), Message.id.asc())
         ).all()
 
-    corrections = {}
-    skipped = 0
-    for content, manual_label, _updated_at in rows:
-        label = LABEL_MAP.get(manual_label)
-        normalized = normalize_content(content or "")
-        if label is None or not normalized:
-            skipped += 1
-            continue
-        # 后写入的覆盖先写入的，保证同一正文只有一个人工结论。
-        corrections[normalized] = label
-    return corrections, len(rows), skipped
+    data = pd.DataFrame(rows, columns=["content", "label"])
+    data["content"] = data["content"].fillna("").map(normalize_content)
+    data["label"] = data["label"].map(LABEL_MAP)
+    valid = data.loc[data["content"].ne("") & data["label"].notna()]
+    latest = valid.groupby("content", sort=False)["label"].last()
+    return latest.astype(int).to_dict(), len(data), len(data) - len(valid)
 
 
 def build_corrected_training(corrections, train_samples, test_samples):
@@ -72,12 +61,9 @@ def build_corrected_training(corrections, train_samples, test_samples):
     correction_groups = groups[start + len(test_samples):]
     stats = {"annotated_total": len(corrections), "updated": 0, "added": 0, "excluded_test_overlap": 0, "label_changed": 0,
              "excluded_group_overlap": 0, "removed_training_overlap": 0}
-    train_by_text = {}
-    for index, row in enumerate(train_samples):
-        if groups[index] in protected_groups:
-            stats["removed_training_overlap"] += 1
-            continue
-        train_by_text[normalize_content(row["content"])] = row.copy()
+    retained = [row for row, group in zip(train_samples, groups) if group not in protected_groups]
+    stats["removed_training_overlap"] = len(train_samples) - len(retained)
+    train_by_text = {normalize_content(row["content"]): row.copy() for row in retained}
 
     for (text, label), group in zip(corrections.items(), correction_groups):
         original_text = text
@@ -128,6 +114,7 @@ def evaluate_on_test(model_path, test_samples):
         "training_sample_count": pipeline.training_sample_count_,
         "vocabulary_size": len(pipeline[0].get_feature_names_out()),
         "zero_feature_count": int((pipeline[0].transform(contents).getnnz(axis=1) == 0).sum()),
+        "misclassified_count": report["confusion_matrix"]["fp"] + report["confusion_matrix"]["fn"],
     })
     return report
 
@@ -175,8 +162,6 @@ def run(output_dir=DEFAULT_OUTPUT_DIR, baseline_path=DEFAULT_MODEL_PATH, model_n
 
     baseline = evaluate_on_test(baseline_path, test_samples)
     retrained = evaluate_on_test(model_path, test_samples)
-    baseline["misclassified_count"] = baseline["confusion_matrix"]["fp"] + baseline["confusion_matrix"]["fn"]
-    retrained["misclassified_count"] = retrained["confusion_matrix"]["fp"] + retrained["confusion_matrix"]["fn"]
     delta = {key: retrained[key] - baseline[key] for key in ("accuracy", "precision", "recall", "f1")}
     delta["misclassified_count"] = retrained["misclassified_count"] - baseline["misclassified_count"]
 
@@ -215,12 +200,6 @@ if __name__ == "__main__":
     parser.add_argument("--overwrite", action="store_true", help="重训目录下已有模型时覆盖")
     args = parser.parse_args()
     comparison, model_path = run(args.output_dir, args.baseline_model, args.model_name, args.overwrite)
-    corrections = comparison["corrections"]
-    print(
-        f"人工标签 {corrections['annotated_total']} 条：更新 {corrections['updated']} 条"
-        f"（变更 {corrections['label_changed']} 条）、新增 {corrections['added']} 条，"
-        f"排除评估集正文重合 {corrections['excluded_test_overlap']} 条、模板组重合 {corrections['excluded_group_overlap']} 条"
-    )
-    print(format_report(comparison))
+    print((model_path.parent / "comparison.md").read_text(encoding="utf-8"))
     print(f"纠正训练快照：{comparison['corrected_train_csv']}")
     print(f"新模型：{model_path}")

@@ -26,9 +26,11 @@
 
 ## 来源处理
 
-- `backend/app/commands/clean_tree_hole.py`、`backend/app/commands/annotate_tree_hole.py`：提取树洞 `detail`，清理空值和完全重复，保守辅助初标，排除 488 条不确定样本。未将所有帖子直接标为正常。
-- `backend/app/commands/prepare_chineseharm.py`：从黑产广告、欺诈、博彩、低俗色情中筛选明确广告或商业引流，模板/近似去重后固定种子抽样；`source` 保留原始类别。
-- `backend/app/commands/prepare_iad.py`：仅提取广告描述，排除审核说明、语境不明文本及重复；5,167 条记录得到 96 条候选，不重复采样补足。
+- 校园树洞数据提取 `detail`，清理空值和完全重复，保守辅助初标，排除 488 条不确定样本。
+- ChineseHarm 数据从黑产广告、欺诈、博彩、低俗色情中筛选明确广告或商业引流，模板及近似去重后固定种子抽样，`source` 保留原始类别。
+- IAD 数据仅提取广告描述，排除审核说明、语境不明文本及重复，5,167 条记录得到 96 条候选。
+
+以上原始数据处理已完成，最终答辩版本直接使用固定 CSV 快照。对应处理脚本保存在 Git 提交 `4201ecd` 中，从原始数据重新清洗时可从该提交恢复。
 
 来源地址及 IAD 论文引用见项目 [README](../../README.md#数据与训练)。ChineseHarm 上游 README 声明数据采用 CC BY-NC 4.0，软件 MIT 许可另存。IAD 的数据许可需参考上游说明。
 

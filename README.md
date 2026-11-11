@@ -29,7 +29,7 @@
 1. 在包含 `backend`、`frontend` 的目录安装依赖，将 `backend/.env.example` 复制为 `backend/.env`，填写 MySQL 连接和至少 32 个随机 ASCII 字符的 `JWT_SECRET_KEY`。
 
    ```powershell
-   uv sync --project backend --group dev
+   uv sync --project backend --no-dev
    Copy-Item backend/.env.example backend/.env
    ```
 
@@ -55,27 +55,23 @@
 
 开发环境通过 Vite 将 `/api` 代理至 `http://127.0.0.1:8000`。如需更改目标，复制 `frontend/.env.example` 为 `frontend/.env.local` 并修改配置。生产环境可参考 [Nginx 配置示例](frontend/nginx.conf.example)。
 
-## 测试与构建
+## 答辩版本与构建
+
+当前目录为最终答辩版本，已清理自动化测试、隔离测试服务、报告与演示辅助脚本，以及旧数据库迁移和原始数据处理脚本。保留数据库初始化、基于固定数据快照的模型训练、预测、评估和人工纠正后重训入口。
+
+完整测试及辅助脚本可在 Git 提交 `4201ecd` 中查看。
 
 ```powershell
-uv run --project backend python -m pytest -q
-npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
 前端构建产物位于 `frontend/dist/`。更多前端使用说明见 [前端 README](frontend/README.md)。
 
-## 数据库升级
+## 数据库结构
 
-新数据库使用初始化脚本建表。升级已有数据库前请备份并停止后端，按已有结构需要运行以下脚本：
+新数据库按“本地运行”中的初始化命令创建当前结构。最终答辩版本已移除旧数据库迁移脚本，历史版本升级流程可在 Git 提交 `4201ecd` 中查看。
 
-```powershell
-uv run --project backend python -m backend.app.commands.migrate_users
-uv run --project backend python -m backend.app.commands.migrate_record_timestamps
-uv run --project backend python -m backend.app.commands.migrate_review_sources
-```
-
-表结构、字段和迁移说明见 [数据库文档](DATABASE_README.md)。
+表结构、字段和初始化说明见 [数据库文档](DATABASE_README.md)。
 
 ## 数据与训练
 

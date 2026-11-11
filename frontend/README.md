@@ -50,21 +50,13 @@ src/
 
 后端提供标注及审核历史接口，前端暂未提供历史页面。统计页调用管理员接口 `GET /api/v1/statistics`，每次进入页面或点击刷新时重新读取。
 
-## 测试和构建
+## 构建与预览
 
 ```powershell
-npm test
 npm run build
 npm run preview
 ```
 
-`npm test` 使用 Node 内置测试运行器，验证请求契约、登录失效、检索分页、统计加载、分类组件实际渲染及时间显示。分类测试覆盖人工纠正后原始预测、贡献方向与数量、零概率和无特征反馈；旧解释中的 `weight` 不被当作新贡献值。`npm run build` 生成 `dist/`；`preview` 仅供本地检查，也会代理 `/api`。生产部署可参考 `nginx.conf.example`，由 Nginx 托管 `dist/` 并代理 FastAPI。路由使用 hash 模式，刷新不会要求后端提供页面路由。
+`npm run build` 生成 `dist/`；`preview` 仅供本地检查，也会代理 `/api`。生产部署可参考 `nginx.conf.example`，由 Nginx 托管 `dist/` 并代理 FastAPI。路由使用 hash 模式，刷新不会要求后端提供页面路由。
 
-浏览器联调可使用隔离的内存数据库：在项目根目录运行 `uv run --project backend python frontend/tests/serve_backend.py`，然后在前端终端运行：
-
-```powershell
-$env:VITE_API_PROXY_TARGET = 'http://127.0.0.1:8001'
-npm run dev
-```
-
-隔离测试账号为 `student`、`admin`，密码均为 `test-password-123`。仅测试服务提供这些账号；停止服务后测试数据消失，不连接本地 MySQL。正常开发请清除该环境变量或另开终端，使代理恢复到 8000。
+答辩版本已移除自动化测试和隔离测试服务，使用正常后端进行演示。完整测试可在 Git 提交 `4201ecd` 中查看。

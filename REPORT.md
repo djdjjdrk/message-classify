@@ -93,9 +93,6 @@ cd frontend; npm ci; npm run dev
 
 ## 8. 验证
 
-```powershell
-uv run --project backend python -m pytest -q
-npm --prefix frontend test
-```
+清理前验证记录：后端 321 项、前端 22 项测试全部通过；已检查最终模型加载、默认配置、弱标注候选与测试/来源留出集的正文及模板不交叉，以及训练不含 IAD 来源。
 
-本次验证：后端 321 项、前端 22 项测试全部通过；已检查最终模型加载、默认配置、弱标注候选与测试/来源留出集的正文及模板不交叉，以及训练不含 IAD 来源。
+最终答辩版本已移除自动化测试和报告辅助脚本，完整代码保存在 Git 提交 `4201ecd` 中。前端构建命令为 `npm --prefix frontend run build`。
